@@ -10,4 +10,4 @@ COPY . .
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["python", "bot.py"]
+CMD ["python", "main.py"]
