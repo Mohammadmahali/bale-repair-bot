@@ -2,7 +2,29 @@ import json, time, requests, random, string, ssl
 from math import radians, sin, cos, sqrt, atan2
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
+import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/plain; charset=utf-8')
+        self.end_headers()
+        self.wfile.write("Bot is running".encode('utf-8'))
+    def log_message(self, format, *args):
+        pass
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 8080))
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthHandler)
+        print("Health server on port " + str(port))
+        server.serve_forever()
+    except Exception as ex:
+        print("Health server error:", ex)
+
+threading.Thread(target=start_health_server, daemon=True).start()
 class SSLAdapter(HTTPAdapter):
     def init_poolmanager(self, *args, **kwargs):
         ctx = ssl.create_default_context()
