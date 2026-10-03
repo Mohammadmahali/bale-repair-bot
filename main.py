@@ -642,8 +642,7 @@ def kb_share_link(url):
     return {"inline_keyboard": [
         [{"text": T["share_btn"], "url": url}],
         [{"text": T["copy_link_btn"], "copy_text": {"text": url}}]
-    ]]}
-
+    ]}
 
 def get_subs(cat_text):
     return {T["elec"]: SUBS_ELEC, T["gas"]: SUBS_GAS, T["cool"]: SUBS_COOL, T["car"]: SUBS_CAR}.get(cat_text, [])
