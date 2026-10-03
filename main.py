@@ -25,7 +25,7 @@ def start_health_server():
 
 threading.Thread(target=start_health_server, daemon=True).start()
 
-# ==================== SSL Adapter برای ویندوز ۷ ====================
+# ==================== SSL Adapter ====================
 class SSLAdapter(HTTPAdapter):
     def init_poolmanager(self, *args, **kwargs):
         ctx = ssl.create_default_context()
@@ -46,6 +46,7 @@ session.verify = False
 TOKEN = "2007928769:p_l7euP0ifN0Vh7OWyFqRaJiN9KNRpgsAWY"
 SUPER_ADMIN = 1808576881
 ADMIN_PASSWORD = "63618"
+FEEDBACK_ID = "@mahalservice"
 API_URL = "https://tapi.bale.ai/bot" + TOKEN
 DB_FILE = "experts.json"
 JOBS_FILE = "jobs.json"
@@ -57,7 +58,6 @@ rating_states = {}
 search_ctx = {}
 admin_sessions = set()
 
-# ==================== زمان‌ها ====================
 RESPONSE_TIMES = [
     "\u0647\u0645\u06cc\u0634\u0647 \u062f\u0631 \u062f\u0633\u062a\u0631\u0633 (\u0641\u0648\u0631\u06cc)",
     "\u062d\u062f\u0627\u06a9\u062b\u0631 \u0646\u06cc\u0645 \u0633\u0627\u0639\u062a",
@@ -108,6 +108,7 @@ T = {
     "adv": "\U0001F50E \u062c\u0633\u062a\u062c\u0648\u06cc \u067E\u06cc\u0634\u0631\u0641\u062a\u0647",
     "list": "\U0001F4CB \u0644\u06cc\u0633\u062a \u0645\u062a\u062e\u0635\u0635\u06cc\u0646",
     "prof": "\U0001F464 \u067E\u0631\u0648\u0641\u0627\u06cc\u0644 \u0645\u0646",
+    "feedback_btn": "\U0001F4AC \u0646\u0637\u0631\u0627\u062a \u0648 \u067E\u06cc\u0634\u0646\u0647\u0627\u062f\u0627\u062a",
     "elec": "\U0001F50C \u0644\u0648\u0627\u0632\u0645 \u0628\u0631\u0642\u06cc",
     "gas": "\U0001F525 \u0644\u0648\u0627\u0632\u0645 \u06af\u0627\u0632\u06cc",
     "cool": "\u2744\uFE0F \u0633\u0631\u0645\u0627\u06cc\u0634\u06cc \u0648 \u06af\u0631\u0645\u0627\u06cc\u0634\u06cc",
@@ -140,11 +141,11 @@ T = {
     "direct": "\n\u26A0\uFE0F \u0644\u0637\u0641\u0627\u064b \u0645\u0633\u062a\u0642\u06cc\u0645\u0627\u064b \u062a\u0645\u0627\u0633 \u0628\u06af\u06cc\u0631\u06cc\u062f.",
     "new_cust": "\U0001F514 \u0645\u0634\u062a\u0631\u06cc \u062c\u062f\u06cc\u062f!",
     "use_menu": "\u0627\u0632 \u0645\u0646\u0648 \u0627\u0633\u062a\u0641\u0627\u062f\u0647 \u06a9\u0646\u06cc\u062f.",
-    "invalid": "\u0645\u0642\u062f\u0627\u0631 \u0645\u0639\u062a\u0628\u0631 \u0646\u06cc\u0633\u062a. \u062f\u0648\u0628\u0627\u0631\u0647 \u062a\u0644\u0627\u0634 \u06a9\u0646\u06cc\u062f.",
+    "invalid": "\u0645\u0642\u062f\u0627\u0631 \u0645\u0639\u062a\u0628\u0631 \u0646\u06cc\u0633\u062a.",
     "no_expert": "\u0647\u0646\u0648\u0632 \u0645\u062a\u062e\u0635\u0635\u06cc \u0646\u06cc\u0633\u062a.",
-    "my_prof": "\U0001F464 \u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0634\u0645\u0627:\n\n",
-    "no_prof": "\u062b\u0628\u062a\u200c\u0646\u0627\u0645 \u0646\u06a9\u0631\u062f\u06cc\u062f.",
-    "tracking": "\U0001F3AB \u06a9\u062f \u067e\u06cc\u06af\u06cc\u0631\u06cc: ",
+    "my_prof": "\U0001F464 \u067E\u0631\u0648\u0641\u0627\u06cc\u0644 \u0634\u0645\u0627:\n\n",
+    "no_prof": "\u062b\u0628\u062a\u200C\u0646\u0627\u0645 \u0646\u06a9\u0631\u062f\u06cc\u062f.",
+    "tracking": "\U0001F3AB \u06a9\u062f \u067E\u06cc\u06af\u06cc\u0631\u06cc: ",
     "tracking_note": "\n\n\u0644\u0637\u0641\u0627\u064b \u0647\u0646\u06af\u0627\u0645 \u0645\u0631\u0627\u062c\u0639\u0647 \u06a9\u062f \u0631\u0627 \u0628\u0647 \u062a\u0639\u0645\u06cc\u0631\u06a9\u0627\u0631 \u0628\u062f\u0647\u06cc\u062f.",
     "chosen_expert": "\U0001F464 \u062a\u0639\u0645\u06cc\u0631\u06a9\u0627\u0631 \u0627\u0646\u062a\u062e\u0627\u0628\u06cc:\n",
     "rate_ask": "\u0644\u0637\u0641\u0627\u064b \u0628\u0647 \u062a\u0639\u0645\u06cc\u0631\u06a9\u0627\u0631 \u0627\u0645\u062a\u06cc\u0627\u0632 \u062f\u0647\u06cc\u062f:",
@@ -159,7 +160,7 @@ T = {
     "rating_avg": "\u2B50 \u0627\u0645\u062a\u06cc\u0627\u0632: ",
     "referral_count": "\U0001F4C8 \u062a\u0639\u062f\u0627\u062f \u0645\u0639\u0631\u0641\u06cc: ",
     "rating_stages": "\n\n\U0001F4CA \u0645\u0631\u0627\u062d\u0644 \u0646\u0638\u0631\u0633\u0646\u062c\u06cc:\n",
-    "response_speed": "\u23F1 \u0633\u0631\u0639\u062a \u067E\u0627\u0633\u062E\u06af\u0648\u06cc\u06cc:",
+    "response_speed": "\u23F1 \u0633\u0631\u0639\u062a \u067E\u0627\u0633\u062e\u06af\u0648\u06cc\u06cc:",
     "repair_time": "\U0001F527 \u0632\u0645\u0627\u0646 \u062a\u0639\u0645\u06cc\u0631:",
     "onsite": "\U0001F3E0 \u062d\u0636\u0648\u0631 \u062f\u0631 \u0645\u062d\u0644:",
     "role": "\U0001F4C2 \u062f\u0633\u062a\u0647:",
@@ -174,9 +175,8 @@ T = {
     "share_btn": "\U0001F517 \u0646\u0645\u0627\u06cc\u0634 \u0644\u06cc\u0646\u06a9 \u0627\u0634\u062a\u0631\u0627\u06a9",
     "copy_link_btn": "\U0001F4CB \u06a9\u067E\u06cc \u0644\u06cc\u0646\u06a9",
     "public_prof": "\U0001F464 \u067E\u0631\u0648\u0641\u0627\u06cc\u0644 \u0645\u062a\u062e\u0635\u0635:\n\n",
-    "expert_not_found": "\u274C \u0645\u062a\u062e\u0635\u0635\u06cc \u0628\u0627 \u0627\u06cc\u0646 \u06a9\u062f \u067e\u06cc\u062f\u0627 \u0646\u0634\u062f.",
+    "expert_not_found": "\u274C \u0645\u062a\u062e\u0635\u0635\u06cc \u0628\u0627 \u0627\u06cc\u0646 \u06a9\u062f \u067E\u06cc\u062f\u0627 \u0646\u0634\u062f.",
     "welcome_via_link": "\u0634\u0645\u0627 \u0627\u0632 \u0637\u0631\u06cc\u0642 \u0644\u06cc\u0646\u06a9 \u0648\u0627\u0631\u062f \u0634\u062f\u06cc\u062f:",
-    # Admin
     "adm_title": "\U0001F510 \u067E\u0646\u0644 \u0645\u062f\u06cc\u0631\u06cc\u062a",
     "adm_ask_pass": "\U0001F510 \u0644\u0637\u0641\u0627\u064b \u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0631\u0627 \u0648\u0627\u0631\u062f \u06a9\u0646\u06cc\u062f:",
     "adm_wrong_pass": "\u274C \u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0627\u0634\u062a\u0628\u0627\u0647 \u0627\u0633\u062a.",
@@ -200,7 +200,7 @@ T = {
     "adm_approved_ok": "\u062a\u0623\u06cc\u06cc\u062f \u0634\u062f.",
     "adm_rejected_ok": "\u0631\u062f \u0634\u062f.",
     "adm_new_expert": "\U0001F514 \u0645\u062a\u062e\u0635\u0635 \u062c\u062f\u06cc\u062f \u062f\u0631 \u0627\u0646\u062a\u0638\u0627\u0631 \u062a\u0623\u06cc\u06cc\u062f:",
-    "adm_no_pending": "\u0647\u06cc\u0686 \u0645\u062a\u062e\u0635\u0635\u06cc \u062f\u0631 \u0627\u0646\u062a\u0638\u0627\u0631 \u062a\u0623\u06cc\u06cc\u062f \u0646\u06cc\u0633\u062a.",
+    "adm_no_pending": "\u0647\u06cc\u0686 \u0645\u062a\u062e\u0635\u0635\u06cc \u062f\u0631 \u0627\u0646\u062a\u0637\u0627\u0631 \u062a\u0623\u06cc\u06cc\u062f \u0646\u06cc\u0633\u062a.",
     "adm_no_exp": "\u0647\u06cc\u0686 \u0645\u062a\u062e\u0635\u0635\u06cc \u0646\u06cc\u0633\u062a.",
     "adm_no_op": "\u0647\u06cc\u0686 \u0645\u062f\u06cc\u0631\u06cc \u062a\u0639\u06cc\u06cc\u0646 \u0646\u0634\u062f\u0647.",
     "adm_ask_op_id": "\u0622\u06cc\u062f\u06cc \u0639\u062f\u062f\u06cc \u0645\u062f\u06cc\u0631 \u062c\u062f\u06cc\u062f \u0631\u0627 \u0648\u0627\u0631\u062f \u06a9\u0646\u06cc\u062f:",
@@ -209,7 +209,6 @@ T = {
     "adm_rm_op": "\u2796 \u062d\u0630\u0641 \u0645\u062f\u06cc\u0631",
     "exp_approved_notify": "\U0001F389 \u062a\u0628\u0631\u06cc\u06a9! \u062b\u0628\u062a\u200C\u0646\u0627\u0645 \u0634\u0645\u0627 \u062a\u0623\u06cc\u06cc\u062f \u0634\u062f.",
     "exp_rejected_notify": "\u0645\u062a\u0623\u0633\u0641\u0627\u0646\u0647 \u062b\u0628\u062a\u200C\u0646\u0627\u0645 \u0634\u0645\u0627 \u062a\u0623\u06cc\u06cc\u062f \u0646\u0634\u062f.",
-    # Shop status
     "shop_btn": "\U0001F3EA \u0648\u0636\u0639\u06cc\u062a \u0645\u063a\u0627\u0632\u0647",
     "shop_status": "\U0001F3EA \u0648\u0636\u0639\u06cc\u062a \u0645\u063a\u0627\u0632\u0647:\n",
     "shop_active": "\U0001F7E2 \u0641\u0639\u0627\u0644 (\u062f\u0631\u06cc\u0627\u0641\u062a \u0645\u0634\u062a\u0631\u06cc)",
@@ -226,14 +225,12 @@ T = {
     "shop_reopen": "\U0001F513 \u0641\u0639\u0627\u0644 \u0633\u0627\u0632\u06cc \u0645\u062c\u062f\u062f",
     "shop_reopened": "\u0645\u063a\u0627\u0632\u0647 \u0641\u0639\u0627\u0644 \u0634\u062f.",
     "shop_reopened_notify": "\U0001F514 \u0645\u063a\u0627\u0632\u0647 \u0634\u0645\u0627 \u0645\u062c\u062f\u062f\u0627\u064b \u0641\u0639\u0627\u0644 \u0634\u062f.",
-    # Feedback
     "feedback": "\n\n\U0001F4AC \u0646\u0638\u0631\u0627\u062a \u0648 \u067E\u06cc\u0634\u0646\u0647\u0627\u062f\u0627\u062a: ",
-    # Location to customer
+    "feedback_msg": "\U0001F4AC \u0646\u0638\u0631\u0627\u062a \u060c \u067E\u06cc\u0634\u0646\u0647\u0627\u062f\u0627\u062a \u0648 \u0634\u06a9\u0627\u06cc\u0627\u062a \u062e\u0648\u062f \u0631\u0627 \u0628\u0647 \u0622\u06cc\u062f\u06cc \u0632\u06cc\u0631 \u0627\u0631\u0633\u0627\u0644 \u06a9\u0646\u06cc\u062f:\n\n",
+    "feedback_empty": "\u062f\u0631 \u062d\u0627\u0644 \u062d\u0627\u0636\u0631 \u0622\u06cc\u062f\u06cc \u062a\u0645\u0627\u0633 \u062a\u0646\u0637\u06cc\u0645 \u0646\u0634\u062f\u0647 \u0627\u0633\u062a.",
     "navigate_btn": "\U0001F4CD \u0645\u0633\u06cc\u0631\u06cc\u0627\u0628\u06cc \u0628\u0647 \u062a\u0639\u0645\u06cc\u0631\u06a9\u0627\u0631",
-    "no_location": "\u062a\u0639\u0645\u06cc\u0631\u06a9\u0627\u0631 \u0645\u0648\u0642\u0639\u06cc\u062a \u062b\u0628\u062a \u0646\u06a9\u0631\u062f\u0647.",
 }
 
-# ==================== زیرتخصص‌ها ====================
 SUBS_ELEC = [
     "\u0645\u0627\u06a9\u0631\u0648\u0641\u0631 / \u0645\u0627\u06cc\u06a9\u0631\u0648\u0648\u06cc\u0648",
     "\u062a\u0648\u0633\u062a\u0631",
@@ -292,27 +289,26 @@ STAGE_DAYS = {0: 30, 1: 150}
 COMMISSION = 100000
 
 
-# ==================== Config ====================
 def load_config():
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except:
-        return {"password": ADMIN_PASSWORD, "operators": [], "feedback_id": ""}
+        return {"password": ADMIN_PASSWORD, "operators": [], "feedback_id": FEEDBACK_ID}
 
 def save_config(d):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(d, f, ensure_ascii=False, indent=2)
 
 def get_feedback_id():
-    return load_config().get("feedback_id", "")
+    c = load_config()
+    return c.get("feedback_id", FEEDBACK_ID)
 
 def is_super_admin(uid):
     return uid == SUPER_ADMIN
 
 def is_admin(uid):
-    if uid == SUPER_ADMIN:
-        return True
+    if uid == SUPER_ADMIN: return True
     return uid in load_config().get("operators", [])
 
 def is_authed_admin(uid):
@@ -325,18 +321,14 @@ def add_operator(uid):
     c = load_config()
     ops = c.get("operators", [])
     if uid not in ops and uid != SUPER_ADMIN:
-        ops.append(uid)
-        c["operators"] = ops
-        save_config(c)
+        ops.append(uid); c["operators"] = ops; save_config(c)
 
 def remove_operator(uid):
     c = load_config()
-    ops = [o for o in c.get("operators", []) if o != uid]
-    c["operators"] = ops
+    c["operators"] = [o for o in c.get("operators", []) if o != uid]
     save_config(c)
 
 
-# ==================== DB ====================
 def load_db():
     try:
         with open(DB_FILE, "r", encoding="utf-8") as f: return json.load(f)
@@ -371,8 +363,7 @@ def gen_code():
 
 def gen_expert_code(name):
     base = "".join(c for c in name if c.isascii() and c.isalnum()).lower()
-    if len(base) < 4:
-        base = "expert"
+    if len(base) < 4: base = "expert"
     chars = string.ascii_lowercase + string.digits
     for _ in range(50):
         code = base[:6] + "".join(random.choices(chars, k=4))
@@ -390,8 +381,7 @@ def get_me():
         if r.get("ok"):
             BOT_USERNAME = r["result"].get("username", "")
             print("Bot username:", BOT_USERNAME)
-    except Exception as ex:
-        print("getMe error:", str(ex)[:100])
+    except Exception as ex: print("getMe error:", str(ex)[:100])
 
 def expert_link(code):
     if BOT_USERNAME:
@@ -405,7 +395,6 @@ def haversine(lat1, lon1, lat2, lon2):
     return 2 * R * atan2(sqrt(a), sqrt(1 - a))
 
 
-# ==================== Shop Status ====================
 def is_shop_open(e):
     if not e.get("active", True): return False
     st = e.get("shop_status", "active")
@@ -416,8 +405,7 @@ def is_shop_open(e):
     return True
 
 def get_shop_label(e):
-    if not e.get("active", True):
-        return T["adm_st_inactive"]
+    if not e.get("active", True): return T["adm_tog_off"]
     st = e.get("shop_status", "active")
     if st == "active": return T["shop_active"]
     if st == "closed_perm": return T["shop_closed_perm"]
@@ -429,7 +417,6 @@ def get_shop_label(e):
     return T["shop_active"]
 
 
-# ==================== Rating ====================
 def avg_crit(e, key):
     t = 0; c = 0
     for s in ["0","1","2"]:
@@ -490,7 +477,6 @@ def rating_breakdown(e, priorities=None):
     return "\n".join(lines)
 
 
-# ==================== Match ====================
 def matches_times(e, handover, return_t):
     if handover is not None and handover < 3:
         rp = int(e.get("response_speed", 3))
@@ -561,7 +547,6 @@ def format_public_profile(e):
     return r
 
 
-# ==================== API ====================
 def api_call(m, jd=None):
     url = API_URL + "/" + m
     for attempt in range(3):
@@ -587,13 +572,13 @@ def answer_callback(cb_id, text=None):
     api_call("answerCallbackQuery", d)
 
 
-# ==================== Keyboards ====================
 def kb_main():
     return {"keyboard": [
         [{"text": T["reg"]}],
         [{"text": T["simple"]}],
         [{"text": T["adv"]}],
-        [{"text": T["list"]}, {"text": T["prof"]}]
+        [{"text": T["list"]}, {"text": T["prof"]}],
+        [{"text": T["feedback_btn"]}]
     ], "resize_keyboard": True}
 
 def kb_cat():
@@ -657,10 +642,9 @@ def kb_share_link(url):
     return {"inline_keyboard": [
         [{"text": T["share_btn"], "url": url}],
         [{"text": T["copy_link_btn"], "copy_text": {"text": url}}]
-    ]}
+    ]]}
 
 
-# ==================== Helpers ====================
 def get_subs(cat_text):
     return {T["elec"]: SUBS_ELEC, T["gas"]: SUBS_GAS, T["cool"]: SUBS_COOL, T["car"]: SUBS_CAR}.get(cat_text, [])
 
@@ -703,7 +687,6 @@ def parse_single(text, mx):
     return None if len(n) != 1 else n[0] - 1
 
 
-# ==================== Back Map ====================
 PREV_STEP = {
     "reg_cat": None, "reg_subs": "reg_cat", "reg_name": "reg_subs",
     "reg_phone": "reg_name", "reg_area": "reg_phone", "reg_ask_location": "reg_area",
@@ -739,7 +722,6 @@ def ask_for_step(chat_id, step, d):
     elif step == "req_who": send_message(chat_id, T["ask_who_pick"], kb_who())
 
 
-# ==================== Jobs ====================
 def create_job(cust_id, chat_id, expert, info):
     jobs = load_jobs()
     code = gen_code()
@@ -783,7 +765,6 @@ def notify_expert(expert, info, code, send_phone):
     send_message(expert["user_id"], msg)
 
 
-# ==================== Rating flow ====================
 def apply_rating(expert_id, cr, stage):
     db = load_db()
     for e in db:
@@ -852,16 +833,15 @@ def check_followups():
         if j.get("next_at",0) > now: continue
         st = j.get("stage",0)
         if st == 0:
-            msg = "\U0001F514 \u06cc\u06a9 \u0645\u0627\u0647 \u0627\u0632 \u062e\u062f\u0645\u0627\u062a " + j.get("expert_name","?") + " \u06af\u0630\u0634\u062a.\n\u0646\u0638\u0631 \u062c\u062f\u06cc\u062f\u062a\u0627\u0646 \u0686\u06cc\u0647\u061f"
+            msg = "\U0001F514 \u06cc\u06a9 \u0645\u0627\u0647 \u0627\u0632 \u062e\u062f\u0645\u0627\u062a " + j.get("expert_name","?") + " \u06af\u0630\u0634\u062a.\n\u0646\u0637\u0631 \u062c\u062f\u06cc\u062f\u062a\u0627\u0646 \u0686\u06cc\u0647\u061f"
         else:
-            msg = "\U0001F514 \u0634\u0634 \u0645\u0627\u0647 \u0627\u0632 \u062e\u062f\u0645\u0627\u062a " + j.get("expert_name","?") + " \u06af\u0630\u0634\u062a.\n\u0646\u0638\u0631 \u0628\u0644\u0646\u062f\u0645\u062f\u062a \u0634\u0645\u0627 \u0628\u0631\u0627\u06cc \u0645\u0627 \u0627\u0631\u0632\u0634\u0645\u0646\u062f\u0647."
-        kb = {"inline_keyboard": [[{"text": "\u2B50 \u062b\u0628\u062a \u0646\u0638\u0631 \u062c\u062f\u06cc\u062f", "callback_data": "frate:" + str(j["expert_id"])}]]}
+            msg = "\U0001F514 \u0634\u0634 \u0645\u0627\u0647 \u0627\u0632 \u062e\u062f\u0645\u0627\u062a " + j.get("expert_name","?") + " \u06af\u0630\u0634\u062a.\n\u0646\u0637\u0631 \u0628\u0644\u0646\u062f\u0645\u062f\u062a \u0634\u0645\u0627 \u0628\u0631\u0627\u06cc \u0645\u0627 \u0627\u0631\u0632\u0634\u0645\u0646\u062f\u0647."
+        kb = {"inline_keyboard": [[{"text": "\u2B50 \u062b\u0628\u062a \u0646\u0637\u0631 \u062c\u062f\u06cc\u062f", "callback_data": "frate:" + str(j["expert_id"])}]]}
         send_message(j["customer_chat_id"], msg, kb)
         j["sent_for_stage"] = st + 1; ch = True
     if ch: save_jobs(jobs)
 
 
-# ==================== Deliver ====================
 def deliver_expert(chat_id, uid, expert, info, send_phone):
     code = create_job(uid, chat_id, expert, info)
     msg = T["chosen_expert"]
@@ -877,14 +857,13 @@ def deliver_expert(chat_id, uid, expert, info, send_phone):
         nav_kb = {"inline_keyboard": [[
             {"text": T["navigate_btn"], "url": "https://www.google.com/maps?q={},{}".format(expert["lat"], expert["lng"])}
         ]]}
-        send_message(chat_id, T["navigate_btn"], nav_kb)
+        send_message(chat_id, "\U0001F4CD \u0645\u0633\u06cc\u0631\u06cc\u0627\u0628\u06cc:", nav_kb)
     rate_kb = {"inline_keyboard": [[
         {"text": T["rate_start"] + expert["name"], "callback_data": "rate:" + str(expert["user_id"])}
     ]]}
     send_message(chat_id, T["rate_ask"], rate_kb)
 
 
-# ==================== Admin ====================
 def notify_admins_new_expert(expert):
     msg = T["adm_new_expert"] + "\n\n"
     msg += T["name"] + " " + expert.get("name", "?") + "\n"
@@ -900,18 +879,20 @@ def notify_admins_new_expert(expert):
     for op in get_operators():
         send_message(op, msg, kb)
 
+
 def admin_stats(chat_id):
     db = load_db(); jobs = load_jobs()
-    total = len(db); active = sum(1 for e in db if e.get("active", True))
+    total = len(db)
     approved = sum(1 for e in db if e.get("status", "approved") == "approved")
     pending = sum(1 for e in db if e.get("status") == "pending")
+    active = sum(1 for e in db if e.get("active", True))
     premium = sum(1 for e in db if e.get("is_premium"))
     refs = sum(e.get("referral_count", 0) for e in db)
     customers = len(set(j.get("customer_id") for j in jobs))
     txt = T["adm_stats"] + ":\n\n"
     txt += "\U0001F465 \u06a9\u0644: " + str(total) + "\n"
     txt += "\u2705 \u062a\u0623\u06cc\u06cc\u062f \u0634\u062f\u0647: " + str(approved) + "\n"
-    txt += "\u23F3 \u062f\u0631 \u0627\u0646\u062a\u0638\u0627\u0631: " + str(pending) + "\n"
+    txt += "\u23F3 \u062f\u0631 \u0627\u0646\u062a\u0637\u0627\u0631: " + str(pending) + "\n"
     txt += "\U0001F7E2 \u0641\u0639\u0627\u0644: " + str(active) + "\n"
     txt += "\u2B50 \u0648\u06cc\u0698\u0647: " + str(premium) + "\n"
     txt += "\U0001F4C8 \u0645\u0639\u0631\u0641\u06cc\u200c\u0647\u0627: " + str(refs) + "\n"
@@ -962,7 +943,7 @@ def admin_expert_detail(chat_id, expert_id):
     e = find_expert(expert_id)
     if not e:
         send_message(chat_id, "\u067e\u06cc\u062f\u0627 \u0646\u0634\u062f.", kb_admin()); return
-    txt = "\U0001F464 " + T["name"] + " " + e.get("name","?") + "\n"
+    txt = T["name"] + " " + e.get("name","?") + "\n"
     txt += T["phone"] + " " + e.get("phone","?") + "\n"
     txt += T["role"] + " " + e.get("category","?") + "\n"
     txt += T["subspec"] + " " + "\u060c ".join(e.get("sub_specialties", [])) + "\n"
@@ -971,7 +952,7 @@ def admin_expert_detail(chat_id, expert_id):
     txt += T["referral_count"] + str(e.get("referral_count", 0)) + "\n"
     txt += T["shop_status"] + get_shop_label(e) + "\n"
     txt += "\U0001F194 " + e.get("expert_code", "?") + "\n"
-    status = T["adm_st_active"] if e.get("active", True) else T["adm_st_inactive"]
+    status = T["adm_st_active"] if e.get("active", True) else T["adm_tog_off"]
     txt += "\u2699 " + status + "\n"
     kb = {"inline_keyboard": [
         [{"text": T["adm_tog_off"] if e.get("active", True) else T["adm_tog_on"], "callback_data": "adm:tog:" + str(expert_id)}],
@@ -1055,7 +1036,6 @@ def admin_reject(expert_id, chat_id):
     send_message(expert_id, T["exp_rejected_notify"])
 
 
-# ==================== Share ====================
 def show_my_link(chat_id, uid):
     e = find_expert(uid)
     if not e:
@@ -1073,7 +1053,6 @@ def show_my_link(chat_id, uid):
     send_message(chat_id, txt, kb_share_link(link))
 
 
-# ==================== Shop Status Handler ====================
 def show_shop_status(chat_id, uid):
     e = find_expert(uid)
     if not e:
@@ -1083,7 +1062,7 @@ def show_shop_status(chat_id, uid):
         days = max(1, int((e["closed_until"] - time.time()) / 86400) + 1)
         txt += "\n\u23F3 " + str(days) + T["shop_days"] + " \u0628\u0627\u0642\u06cc \u0645\u0627\u0646\u062f\u0647"
         if e.get("close_reason"):
-            txt += "\n\U0001F4DD \u062f\u0644\u06cc\u0644: " + e["close_reason"]
+            txt += "\n\U0001F4DD " + e["close_reason"]
         kb = {"inline_keyboard": [[{"text": T["shop_reopen"], "callback_data": "shop:open"}]]}
         send_message(chat_id, txt, kb)
     else:
@@ -1112,7 +1091,6 @@ def set_shop_active(chat_id, uid):
     send_message(chat_id, T["shop_open_ok"], kb_main())
 
 
-# ==================== Handle message ====================
 def handle_message(msg):
     chat_id = msg["chat"]["id"]
     uid = msg["from"]["id"]
@@ -1144,11 +1122,11 @@ def handle_message(msg):
                 send_message(chat_id, format_public_profile(e), kb_main()); return
             else:
                 send_message(chat_id, T["expert_not_found"])
-        send_message(chat_id, T["start"] + T["feedback"] + (get_feedback_id() or ""), kb_main()); return
+        send_message(chat_id, T["start"], kb_main()); return
 
     if text == "/start":
         user_states.pop(uid, None)
-        send_message(chat_id, T["start"] + T["feedback"] + (get_feedback_id() or ""), kb_main()); return
+        send_message(chat_id, T["start"], kb_main()); return
 
     if text == "/admin":
         if not is_admin(uid):
@@ -1160,8 +1138,7 @@ def handle_message(msg):
 
     if is_authed_admin(uid):
         if text == T["adm_exit"]:
-            admin_sessions.discard(uid)
-            user_states.pop(uid, None)
+            admin_sessions.discard(uid); user_states.pop(uid, None)
             send_message(chat_id, T["use_menu"], kb_main()); return
         if text == T["adm_stats"]: admin_stats(chat_id); return
         if text == T["adm_experts"]: admin_experts_list(chat_id); return
@@ -1169,6 +1146,14 @@ def handle_message(msg):
         if text == T["adm_jobs"]: admin_jobs(chat_id); return
         if text == T["adm_revenue"]: admin_revenue(chat_id); return
         if text == T["adm_operators"]: admin_operators(chat_id); return
+
+    if text == T["feedback_btn"]:
+        fid = get_feedback_id()
+        if fid:
+            send_message(chat_id, T["feedback_msg"] + fid, kb_main())
+        else:
+            send_message(chat_id, T["feedback_empty"], kb_main())
+        return
 
     if text == T["reg"]:
         user_states[uid] = {"step": "reg_cat", "data": {}}
@@ -1209,19 +1194,20 @@ def handle_message(msg):
         r += T["repair_time"] + " " + REPAIR_TIMES[int(e.get("repair_time",0))] + "\n"
         r += T["shop_status"] + get_shop_label(e) + "\n\n"
         if e.get("status", "approved") == "pending":
-            r += "\u23F3 \u062f\u0631 \u0627\u0646\u062a\u0638\u0627\u0631 \u062a\u0623\u06cc\u06cc\u062f \u0645\u062f\u06cc\u0631\n\n"
+            r += "\u23F3 \u062f\u0631 \u0627\u0646\u062a\u0637\u0627\u0631 \u062a\u0623\u06cc\u06cc\u062f \u0645\u062f\u06cc\u0631\n\n"
         r += "\u2B50 {:.1f}/5".format(overall_rating(e))
         rv = total_reviews(e)
-        if rv > 0: r += " (" + str(rv) + " \u0646\u0638\u0631)"
+        if rv > 0: r += " (" + str(rv) + " \u0646\u0637\u0631)"
         r += "\n" + T["referral_count"] + str(e.get("referral_count",0)) + "\n\n"
         r += rating_breakdown(e) + T["rating_stages"]
         for st in [0,1,2]:
             a, c = stage_stats(e, st)
             nm = ["\u0627\u0648\u0644\u06cc\u0647","\u06cc\u06a9\u200c\u0645\u0627\u0647","\u0634\u0634\u200c\u0645\u0627\u0647"][st]
-            r += "\n" + nm + ": " + ("\u0647\u0646\u0648\u0632 \u0646\u06cc\u0633\u062a" if a is None else "{:.1f} ({} \u0646\u0638\u0631)".format(a,c))
+            r += "\n" + nm + ": " + ("\u0647\u0646\u0648\u0632 \u0646\u06cc\u0633\u062a" if a is None else "{:.1f} ({} \u0646\u0637\u0631)".format(a,c))
         send_message(chat_id, r, kb_main())
         show_my_link(chat_id, uid)
-        send_message(chat_id, T["shop_btn"] + ":", {"keyboard": [[{"text": T["shop_btn"]}]], "resize_keyboard": True})
+        kb_shop_only = {"keyboard": [[{"text": T["shop_btn"]}], [{"text": T["back"]}]], "resize_keyboard": True}
+        send_message(chat_id, "\u0628\u0631\u0627\u06cc \u062a\u063a\u06cc\u06cc\u0631 \u0648\u0636\u0639\u06cc\u062a \u0645\u063a\u0627\u0632\u0647:", kb_shop_only)
         return
 
     if text == T["shop_btn"]:
@@ -1230,20 +1216,27 @@ def handle_message(msg):
     if uid in user_states:
         st = user_states[uid]; step = st["step"]; d = st["data"]
 
-        # Admin password
         if step == "adm_password":
             if text == T["back"]:
                 user_states.pop(uid, None); send_message(chat_id, T["use_menu"], kb_main()); return
             cfg = load_config()
             if text == cfg.get("password", ADMIN_PASSWORD):
-                admin_sessions.add(uid)
-                user_states.pop(uid, None)
+                admin_sessions.add(uid); user_states.pop(uid, None)
                 send_message(chat_id, T["adm_title"], kb_admin())
             else:
                 send_message(chat_id, T["adm_wrong_pass"], kb_back())
             return
 
-        # Shop status flow
+        if step == "adm_add_op":
+            try:
+                new_id = int(text.strip())
+                add_operator(new_id)
+                user_states.pop(uid, None)
+                send_message(chat_id, T["adm_op_added"], kb_admin())
+            except:
+                send_message(chat_id, T["invalid"], kb_back())
+            return
+
         if step == "shop_close_dur":
             n = parse_single(text, len(CLOSE_DURATIONS))
             if n is None:
@@ -1279,7 +1272,6 @@ def handle_message(msg):
                 st["step"] = prev; ask_for_step(chat_id, prev, d)
             return
 
-        # Registration
         if step == "reg_cat":
             if not valid_cat(text): send_message(chat_id, T["choose"], kb_cat()); return
             d["category"] = text; d["_subs"] = get_subs(text); st["step"] = "reg_subs"
@@ -1350,7 +1342,6 @@ def handle_message(msg):
             notify_admins_new_expert(d)
             return
 
-        # Request flow
         if step == "req_cat":
             if not valid_cat(text): send_message(chat_id, T["choose"], kb_cat()); return
             d["category"] = text; d["_subs"] = get_subs(text); st["step"] = "req_sub"
@@ -1441,7 +1432,6 @@ def handle_message(msg):
                 send_message(chat_id, txt, kb)
             user_states.pop(uid, None); return
 
-    # Shop status buttons
     if text == T["shop_active"]:
         set_shop_active(chat_id, uid); return
     if text == T["shop_closed_temp"]:
@@ -1452,7 +1442,6 @@ def handle_message(msg):
     send_message(chat_id, T["use_menu"], kb_main())
 
 
-# ==================== Callback ====================
 def handle_callback(cb):
     cb_id = cb["id"]; uid = cb["from"]["id"]; chat_id = cb["message"]["chat"]["id"]
     data = cb.get("data", "")
@@ -1531,7 +1520,6 @@ def handle_callback(cb):
         if e: ask_next(chat_id, uid, e)
 
 
-# ==================== Main ====================
 def main():
     print("Bot is running... (Ctrl+C to stop)")
     requests.packages.urllib3.disable_warnings()
