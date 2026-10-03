@@ -1357,4 +1357,221 @@ def handle_message(msg):
             send_message(chat_id, T["choose_sub"] + fmt_list(d["_subs"]), kb_back()); return
 
         if step == "req_sub":
-            ns
+            ns = parse_nums(text, len(d["_subs"]))
+            if len(ns) != 1: send_message(chat_id, T["invalid"], kb_back()); return
+            d["sub"] = d["_subs"][ns[0]-1]
+            mode = search_ctx.get(uid, {}).get("mode", "simple")
+            if mode == "adv":
+                st["step"] = "req_priority"
+                send_message(chat_id, T["ask_priority"] + fmt_criteria(), kb_back())
+            else:
+                st["step"] = "req_area"
+                send_message(chat_id, T["ask_cust_area"], kb_area())
+            return
+
+        if step == "req_priority":
+            if text.strip() != "0" and text.strip() != "" and not parse_priority(text):
+                send_message(chat_id, T["invalid"], kb_back()); return
+            d["priorities"] = parse_priority(text); st["step"] = "req_handover"
+            send_message(chat_id, T["ask_handover"] + fmt_list(HANDOVER_TIMES), kb_back()); return
+
+        if step == "req_handover":
+            n = parse_single(text, len(HANDOVER_TIMES))
+            if n is None: send_message(chat_id, T["invalid"], kb_back()); return
+            d["handover"] = n; st["step"] = "req_return"
+            send_message(chat_id, T["ask_return"] + fmt_list(RETURN_TIMES), kb_back()); return
+
+        if step == "req_return":
+            n = parse_single(text, len(RETURN_TIMES))
+            if n is None: send_message(chat_id, T["invalid"], kb_back()); return
+            d["return_time"] = n; st["step"] = "req_area"
+            send_message(chat_id, T["ask_cust_area"], kb_area()); return
+
+        if step == "req_area":
+            d["area"] = text; st["step"] = "req_desc"
+            send_message(chat_id, T["ask_desc"], kb_back()); return
+
+        if step == "req_desc":
+            d["desc"] = text; st["step"] = "req_phone_share"
+            send_message(chat_id, T["ask_phone_share"], kb_yn()); return
+
+        if step == "req_phone_share":
+            if text not in [T["yes"], T["no"]]: send_message(chat_id, T["choose"], kb_yn()); return
+            if text == T["yes"]:
+                st["step"] = "req_phone_input"
+                send_message(chat_id, T["ask_phone_input"], kb_back())
+            else:
+                d["send_phone"] = False; d["customer_phone"] = None
+                st["step"] = "req_who"; send_message(chat_id, T["ask_who_pick"], kb_who())
+            return
+
+        if step == "req_phone_input":
+            d["send_phone"] = True; d["customer_phone"] = text
+            st["step"] = "req_who"; send_message(chat_id, T["ask_who_pick"], kb_who()); return
+
+        if step == "req_who":
+            if text not in [T["who_me"], T["who_sys"]]: send_message(chat_id, T["choose"], kb_who()); return
+            d["who"] = "me" if text == T["who_me"] else "sys"
+            hv = d.get("handover"); clat = d.get("lat"); clng = d.get("lng")
+            results = find_matching(d["category"], d["sub"], d.get("area",""), False, False, d.get("priorities",[]), hv, clat, clng)
+            if not results and hv is not None:
+                results = find_matching(d["category"], d["sub"], d.get("area",""), False, False, d.get("priorities",[]), None, clat, clng)
+            if not results:
+                send_message(chat_id, T["not_found"], kb_main())
+                user_states.pop(uid,None); search_ctx.pop(uid,None); return
+            info = {
+                "category": d["category"], "sub": d["sub"],
+                "area": d.get("area",""), "desc": d.get("desc",""),
+                "phone": d.get("customer_phone") if d.get("send_phone") else None
+            }
+            search_ctx[uid] = {"mode": search_ctx.get(uid,{}).get("mode","simple"),
+                              "results": results, "info": info,
+                              "send_phone": d.get("send_phone", False),
+                              "who": d.get("who","me")}
+            if d["who"] == "sys":
+                deliver_expert(chat_id, uid, results[0], info, d.get("send_phone", False))
+            else:
+                txt = T["found"]
+                for i, e in enumerate(results, 1):
+                    txt += format_expert_line(e, i, d.get("priorities",[])) + "\n"
+                txt += "\n\u06cc\u06a9\u06cc \u0631\u0627 \u0627\u0646\u062a\u062e\u0627\u0628 \u06a9\u0646\u06cc\u062f:"
+                kb = {"inline_keyboard": []}
+                for e in results:
+                    kb["inline_keyboard"].append([{"text": "\u2705 " + e["name"], "callback_data": "pick:" + str(e["user_id"])}])
+                send_message(chat_id, txt, kb)
+            user_states.pop(uid, None); return
+
+    # Shop status buttons
+    if text == T["shop_active"]:
+        set_shop_active(chat_id, uid); return
+    if text == T["shop_closed_temp"]:
+        set_shop_closed_temp(chat_id, uid); return
+    if text == T["shop_closed_perm"]:
+        set_shop_closed_perm(chat_id, uid); return
+
+    send_message(chat_id, T["use_menu"], kb_main())
+
+
+# ==================== Callback ====================
+def handle_callback(cb):
+    cb_id = cb["id"]; uid = cb["from"]["id"]; chat_id = cb["message"]["chat"]["id"]
+    data = cb.get("data", "")
+
+    if data.startswith("adm:"):
+        if not is_authed_admin(uid):
+            answer_callback(cb_id, T["adm_not_auth"]); return
+        parts = data.split(":")
+        action = parts[1]
+        answer_callback(cb_id)
+        if action == "exp": admin_expert_detail(chat_id, int(parts[2]))
+        elif action == "tog": admin_toggle_active(int(parts[2]), chat_id)
+        elif action == "prem": admin_toggle_premium(int(parts[2]), chat_id)
+        elif action == "del": admin_delete(int(parts[2]), chat_id)
+        elif action == "back": admin_experts_list(chat_id)
+        elif action == "backmain": send_message(chat_id, T["adm_title"], kb_admin())
+        elif action == "pendinglist": admin_pending_list(chat_id)
+        elif action == "viewp": admin_view_pending(chat_id, int(parts[2]))
+        elif action == "appr": admin_approve(int(parts[2]), chat_id)
+        elif action == "rej": admin_reject(int(parts[2]), chat_id)
+        elif action == "addop":
+            if not is_super_admin(uid):
+                answer_callback(cb_id, "\u0641\u0642\u0637 \u0645\u062f\u06cc\u0631 \u0627\u0635\u0644\u06cc"); return
+            user_states[uid] = {"step": "adm_add_op", "data": {}}
+            send_message(chat_id, T["adm_ask_op_id"], kb_back())
+        elif action == "rmop":
+            if not is_super_admin(uid):
+                answer_callback(cb_id, "\u0641\u0642\u0637 \u0645\u062f\u06cc\u0631 \u0627\u0635\u0644\u06cc"); return
+            ops = get_operators()
+            if not ops:
+                send_message(chat_id, T["adm_no_op"], kb_admin()); return
+            kb = {"inline_keyboard": []}
+            for op in ops:
+                kb["inline_keyboard"].append([{"text": str(op), "callback_data": "adm:rmopid:" + str(op)}])
+            kb["inline_keyboard"].append([{"text": T["adm_back"], "callback_data": "adm:backmain"}])
+            send_message(chat_id, ":", kb)
+        elif action == "rmopid":
+            if not is_super_admin(uid):
+                answer_callback(cb_id, "\u0641\u0642\u0637 \u0645\u062f\u06cc\u0631 \u0627\u0635\u0644\u06cc"); return
+            remove_operator(int(parts[2]))
+            send_message(chat_id, "\u062d\u0630\u0641 \u0634\u062f.", kb_admin())
+        return
+
+    if data == "shop:open":
+        set_shop_active(chat_id, uid); return
+
+    if data.startswith("pick:"):
+        expert_id = int(data.split(":")[1])
+        e = find_expert(expert_id); ctx = search_ctx.get(uid)
+        if not e or not ctx: answer_callback(cb_id, T["err"]); return
+        answer_callback(cb_id)
+        deliver_expert(chat_id, uid, e, ctx["info"], ctx.get("send_phone", False))
+        search_ctx.pop(uid, None)
+
+    elif data.startswith("rate:"):
+        expert_id = int(data.split(":")[1]); e = find_expert(expert_id)
+        if not e: answer_callback(cb_id, T["err"]); return
+        rating_states[uid] = {"expert_id": expert_id, "ratings": {}, "stage": 0}
+        answer_callback(cb_id); ask_next(chat_id, uid, e)
+
+    elif data.startswith("frate:"):
+        expert_id = int(data.split(":")[1]); e = find_expert(expert_id)
+        if not e: answer_callback(cb_id, T["err"]); return
+        j = get_pending_job(uid, expert_id)
+        if not j: answer_callback(cb_id, "\u067e\u0631\u0648\u0698\u0647 \u067e\u06cc\u062f\u0627 \u0646\u0634\u062f."); return
+        rating_states[uid] = {"expert_id": expert_id, "ratings": {}, "stage": j.get("stage",0)+1}
+        answer_callback(cb_id); ask_next(chat_id, uid, e)
+
+    elif data.startswith("crit:"):
+        parts = data.split(":"); ck = parts[1]; stars = int(parts[2])
+        st = rating_states.get(uid)
+        if not st: answer_callback(cb_id, T["err"]); return
+        st["ratings"][ck] = stars
+        answer_callback(cb_id, T["rate_ok"])
+        e = find_expert(st["expert_id"])
+        if e: ask_next(chat_id, uid, e)
+
+
+# ==================== Main ====================
+def main():
+    print("Bot is running... (Ctrl+C to stop)")
+    requests.packages.urllib3.disable_warnings()
+    try:
+        api_call("deleteWebhook"); print("Webhook deleted")
+    except: pass
+    get_me()
+    try:
+        session.get(API_URL + "/getUpdates", params={"offset": -1}, timeout=30)
+        print("Old updates cleared")
+    except Exception as ex: print("Clear:", str(ex)[:100])
+    offset = None; last_fp = 0; fail_count = 0
+    while True:
+        try:
+            now = time.time()
+            if now - last_fp > 60:
+                try: check_followups()
+                except Exception as ex: print("FP:", str(ex)[:100])
+                last_fp = now
+            p = {"timeout": 25}
+            if offset: p["offset"] = offset
+            r = session.get(API_URL + "/getUpdates", params=p, timeout=45)
+            data = r.json()
+            fail_count = 0
+            if data.get("ok") and data.get("result"):
+                for u in data["result"]:
+                    offset = u["update_id"] + 1
+                    try:
+                        if "message" in u: handle_message(u["message"])
+                        elif "callback_query" in u: handle_callback(u["callback_query"])
+                    except Exception as ex: print("H:", str(ex)[:100])
+        except Exception as ex:
+            fail_count += 1
+            print("P (" + str(fail_count) + "):", str(ex)[:100])
+            if fail_count > 5:
+                time.sleep(30); fail_count = 0
+            else:
+                time.sleep(10)
+            continue
+        time.sleep(2)
+
+if __name__ == "__main__":
+    main()
