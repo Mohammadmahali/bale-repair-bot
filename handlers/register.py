@@ -20,7 +20,6 @@ from utils import (
     parse_numbers, parse_single_number, format_numbered_list,
     gen_expert_code,
 )
-from handlers.start import format_public_profile
 
 
 # ==================== زیرتخصص‌ها ====================
@@ -103,6 +102,7 @@ PREV_STEP = {
     "reg_repair": "reg_response",
 }
 
+
 def get_subs_by_category(category):
     if category == CAT_ELEC:
         return SUBS_ELEC
@@ -179,22 +179,21 @@ def continue_registration(chat_id, user_id, text, sessions):
         return True
     
     # ===== مرحله: تلفن =====
-      if step == "reg_phone":
+    if step == "reg_phone":
         data["phone"] = text.strip()
-    elif step == "reg_city":
+        session["step"] = "reg_city"
         send_message(chat_id, ASK_CITY, kb_text_only())
-    elif step == "reg_area":
-        send_message(chat_id, ASK_AREA, kb_text_only())
         return True
     
+    # ===== مرحله: شهر =====
     if step == "reg_city":
         data["city"] = text.strip()
         session["step"] = "reg_area"
         send_message(chat_id, ASK_AREA, kb_text_only())
         return True
     
-    # ===== مرحله: محدوده (فقط متن) =====
-      if step == "reg_area":
+    # ===== مرحله: محدوده (محله) =====
+    if step == "reg_area":
         neighborhood = text.strip()
         city = data.get("city", "")
         if neighborhood:
@@ -220,8 +219,6 @@ def continue_registration(chat_id, user_id, text, sessions):
     
     # ===== مرحله: لوکیشن =====
     if step == "reg_location":
-        # این مرحله رو handler لوکیشن مدیریت می‌کنه
-        # اگه متن اومد، دوباره درخواست کن
         send_message(chat_id, ASK_SEND_LOCATION, kb_location())
         return True
     
@@ -295,13 +292,12 @@ def finalize_registration(chat_id, user_id, data, sessions):
     data["expert_code"] = gen_expert_code(data.get("name", "expert"))
     data["created_at"] = int(time.time())
     
-    # حذف فیلد کمکی
     data.pop("_subs", None)
     
     add_or_update_expert(data)
     sessions.pop(user_id, None)
     
-    # پیام تأیید به تعمیرکار
+    # پیام تأیید
     msg = REGISTER_OK + "\n\n"
     msg += LBL_NAME + " " + data["name"] + "\n"
     msg += LBL_ROLE + " " + data["category"] + "\n"
@@ -314,7 +310,6 @@ def finalize_registration(chat_id, user_id, data, sessions):
     msg += "https://ble.ir/" + str(data["expert_code"])
     msg += "\n\n" + REGISTER_PENDING
     
-    # ارسال پیام + دکمه کپی لینک
     link = "https://ble.ir/yourbot?start=" + data["expert_code"]
     send_message(chat_id, msg, kb_share_link(link))
     
@@ -339,6 +334,8 @@ def ask_for_step(chat_id, step, data):
         send_message(chat_id, ASK_NAME, kb_back())
     elif step == "reg_phone":
         send_message(chat_id, ASK_PHONE, kb_back())
+    elif step == "reg_city":
+        send_message(chat_id, ASK_CITY, kb_text_only())
     elif step == "reg_area":
         send_message(chat_id, ASK_AREA, kb_text_only())
     elif step == "reg_ask_location":
