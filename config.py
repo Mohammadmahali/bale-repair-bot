@@ -12,8 +12,8 @@ USERS_FILE = "users.json"
 REPORTS_FILE = "reports.json"
 
 # ==================== تنظیمات ادمین ====================
-DEFAULT_PASSWORD = "1234"
-FEEDBACK_ID = "@your_username"
+DEFAULT_PASSWORD = "63618"
+FEEDBACK_ID = "@mahalservice"
 
 # ==================== سیستم مشتری رایگان ====================
 FREE_CUSTOMERS = 30
