@@ -4,7 +4,7 @@ from config import DB_FILE
 from texts import (
     CAT_ELEC, CAT_GAS, CAT_COOL, CAT_CAR,
     YES, NO, CHOOSE_OPTION, INVALID_INPUT, BTN_BACK,
-    ASK_NAME, ASK_PHONE, ASK_AREA, ASK_LOCATION, ASK_SEND_LOCATION,
+    ASK_NAME, ASK_PHONE, ASK_CITY, ASK_AREA, ASK_LOCATION, ASK_SEND_LOCATION,
     LOCATION_SAVED, ASK_ONSITE, ASK_RESPONSE_SPEED, ASK_REPAIR_TIME,
     RESPONSE_TIMES, REPAIR_TIMES, REGISTER_OK, REGISTER_PENDING,
     LBL_NAME, LBL_ROLE, LBL_SUBSPEC, LBL_AREA, LBL_PHONE, LBL_ONSITE,
@@ -94,14 +94,14 @@ PREV_STEP = {
     "reg_subs": "reg_cat",
     "reg_name": "reg_subs",
     "reg_phone": "reg_name",
-    "reg_area": "reg_phone",
+    "reg_city": "reg_phone",
+    "reg_area": "reg_city",
     "reg_ask_location": "reg_area",
     "reg_location": "reg_ask_location",
     "reg_onsite": "reg_ask_location",
     "reg_response": "reg_onsite",
     "reg_repair": "reg_response",
 }
-
 
 def get_subs_by_category(category):
     if category == CAT_ELEC:
@@ -179,15 +179,28 @@ def continue_registration(chat_id, user_id, text, sessions):
         return True
     
     # ===== مرحله: تلفن =====
-    if step == "reg_phone":
+      if step == "reg_phone":
         data["phone"] = text.strip()
+    elif step == "reg_city":
+        send_message(chat_id, ASK_CITY, kb_text_only())
+    elif step == "reg_area":
+        send_message(chat_id, ASK_AREA, kb_text_only())
+        return True
+    
+    if step == "reg_city":
+        data["city"] = text.strip()
         session["step"] = "reg_area"
         send_message(chat_id, ASK_AREA, kb_text_only())
         return True
     
     # ===== مرحله: محدوده (فقط متن) =====
-    if step == "reg_area":
-        data["area"] = text.strip()
+      if step == "reg_area":
+        neighborhood = text.strip()
+        city = data.get("city", "")
+        if neighborhood:
+            data["area"] = city + "، " + neighborhood
+        else:
+            data["area"] = city
         session["step"] = "reg_ask_location"
         send_message(chat_id, ASK_LOCATION, kb_yes_no())
         return True
