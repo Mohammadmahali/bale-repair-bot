@@ -152,16 +152,20 @@ def kb_share_link(url):
 
 # ==================== کیبورد مسیریابی ====================
 def kb_navigation(lat, lng):
-    neshan_url = "https://neshan.org/maps/@{},{}".format(lat, lng)
+    # Deep link نشان (اپلیکیشن باز می‌شه)
+    neshan_app = "neshan://maps?lat={}&lng={}".format(lat, lng)
+    # لینک وب نشان (اگه اپ نصب نبود)
+    neshan_web = "https://neshan.org/maps/@{},{}".format(lat, lng)
+    # گوگل مپ
     google_url = "https://www.google.com/maps?q={},{}".format(lat, lng)
+    
     return {
         "inline_keyboard": [
-            [{"text": BTN_NAV_NESHAN, "url": neshan_url}],
+            [{"text": BTN_NAV_NESHAN, "url": neshan_app}],
+            [{"text": "🌐 نشان (وب)", "url": neshan_web}],
             [{"text": BTN_NAV_GOOGLE, "url": google_url}]
         ]
     }
-
-
 # ==================== کیبورد تأیید/رد (ادمین) ====================
 def kb_approve_reject(user_id):
     return {
