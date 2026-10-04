@@ -260,6 +260,17 @@ def handle_callback(cb):
         return
     
     # ===== callback fuzzy (تشخیص غلط تایپی) =====
+        # ===== callback fuzzy برای ثبت‌نام =====
+    if data.startswith("regfuzzy:"):
+        action = data.split(":")[1]
+        from handlers.register import handle_city_fuzzy_callback
+        if handle_city_fuzzy_callback(chat_id, user_id, action, sessions):
+            answer_callback(cb_id)
+            return
+        answer_callback(cb_id, "خطا")
+        return
+    
+    # ===== callback fuzzy (تشخیص غلط تایپی) برای مشتری =====
     if data.startswith("fuzzy:"):
         action = data.split(":")[1]
         if user_id in sessions:
