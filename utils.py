@@ -103,10 +103,7 @@ def levenshtein_distance(s1, s2):
 
 
 def find_similar_cities(input_city, max_distance=None):
-    """پیدا کردن شهرهای مشابه با ورودی کاربر"""
-    if max_distance is None:
-        max_distance = FUZZY_DISTANCE
-    
+    """پیدا کردن شهرهای مشابه با ورودی کاربر - با دامنه پویا"""
     input_clean = input_city.strip().replace("ي", "ی").replace("ك", "ک")
     matches = []
     
@@ -118,10 +115,18 @@ def find_similar_cities(input_city, max_distance=None):
         
         # محاسبه فاصله
         distance = levenshtein_distance(input_clean, city_clean)
-        if distance <= max_distance:
+        
+        # دامنه پویا: هر چی اسم شهر بلندتر، دامنه بیشتر
+        dynamic_max = max_distance
+        if len(city_clean) >= 5:
+            dynamic_max = max_distance + 1
+        if len(city_clean) >= 7:
+            dynamic_max = max_distance + 2
+        
+        # محدودیت: فاصله نباید بیشتر از ۴۰٪ طول شهر باشه
+        if distance <= dynamic_max and distance <= len(city_clean) * 0.4:
             matches.append((city, distance))
     
-    # مرتب‌سازی بر اساس فاصله
     matches.sort(key=lambda x: x[1])
     return [m[0] for m in matches]
 
