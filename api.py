@@ -120,8 +120,12 @@ def clear_old_updates():
 
 # ==================== ارسال لوکیشن ====================
 def send_location(chat_id, latitude, longitude):
-    """ارسال لوکیشن"""
-    data = {"chat_id": chat_id, "latitude": latitude, "longitude": longitude}
+    """ارسال موقعیت مکانی به صورت Location Message"""
+    data = {
+        "chat_id": chat_id,
+        "latitude": latitude,
+        "longitude": longitude
+    }
     return api_call("sendLocation", data)
 
 
