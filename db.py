@@ -318,7 +318,7 @@ def get_stats():
 
 
 def is_shop_open(expert):
-    """بررسی باز بودن مغازه"""
+    """بررسی باز بودن مغازه - با چک کردن زمان شروع و پایان تعطیلی"""
     if not expert.get("active", True):
         return False
     status = expert.get("shop_status", "active")
@@ -327,6 +327,15 @@ def is_shop_open(expert):
     if status == "closed_perm":
         return False
     if status == "closed_temp":
-        if expert.get("closed_until", 0) > time.time():
-            return False
+        now = time.time()
+        closed_from = expert.get("closed_from", 0)
+        closed_until = expert.get("closed_until", 0)
+        # اگه هنوز تعطیلی شروع نشده → مغازه بازه
+        if closed_from > 0 and closed_from > now:
+            return True
+        # اگه تعطیلی تموم شده → مغازه بازه
+        if closed_until > 0 and closed_until <= now:
+            return True
+        # در غیر این صورت → بسته
+        return False
     return True
