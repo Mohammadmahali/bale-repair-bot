@@ -470,18 +470,8 @@ def deliver_expert(chat_id, customer_id, expert, info, send_phone):
         msg += "\n\n💬 نظرات و پیشنهادات: " + fid
     send_message(chat_id, msg, kb_main())
     notify_expert(expert, info, code, send_phone)
-        if expert.get("lat") and expert.get("lng"):
-        # ارسال موقعیت مکانی (اپ پیش‌فرض کاربر باز می‌شه)
-        from api import send_location
-        send_location(chat_id, expert["lat"], expert["lng"])
-        # ارسال دکمه‌های لینک برای وب
-        send_message(
-            chat_id,
-            "📍 موقعیت تعمیرکار روی نقشه ارسال شد. "
-            "روی آن بزنید تا اپ نقشه باز شود.\n\n"
-            "یا از لینک‌های زیر استفاده کنید:",
-            kb_navigation(expert["lat"], expert["lng"])
-        )
+    if expert.get("lat") and expert.get("lng"):
+        send_message(chat_id, "📍 برای مسیریابی:", kb_navigation(expert["lat"], expert["lng"]))
 
 
 def notify_expert(expert, info, code, send_phone):
