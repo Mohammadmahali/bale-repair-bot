@@ -16,26 +16,25 @@ from texts import (
 from keyboards import (
     kb_categories, kb_yes_no, kb_back, kb_location,
     kb_who_picks, kb_navigation, kb_main,
+    kb_city_confirm, kb_city_multiple,
 )
 from api import send_message
 from db import (
     load_experts, create_job, is_shop_open,
-    find_expert_by_id,
+    find_expert_by_id, get_feedback_id,
 )
 from utils import (
     parse_numbers, parse_single_number, parse_priorities,
     find_similar_cities, format_numbered_list, format_criteria_list,
-    haversine,
+    haversine, normalize_text,
 )
 from handlers.register import get_subs_by_category, is_valid_category
 
 
-# ==================== ثابت‌های داخلی ====================
 STAGE_DAYS = {0: 30, 1: 150}
 LOCATION_RADIUS_KM = 20
 
 
-# ==================== نقشه بازگشت ====================
 PREV_STEP = {
     "req_cat": None,
     "req_sub": "req_cat",
@@ -48,20 +47,17 @@ PREV_STEP = {
     "req_phone_input": "req_phone_share",
     "req_who": "req_phone_share",
     "req_fuzzy_confirm": "req_area",
+    "req_fuzzy_multiple": "req_area",
 }
 
 
-# ==================== شروع جستجو ====================
 def start_search(chat_id, user_id, mode, sessions, search_modes):
-    """شروع جستجو - mode: simple یا adv"""
     search_modes[user_id] = mode
     sessions[user_id] = {"step": "req_cat", "data": {}}
     send_message(chat_id, CHOOSE_OPTION, kb_categories())
 
 
-# ==================== ادامه جستجو ====================
 def continue_search(chat_id, user_id, text, sessions, search_modes):
-    """ادامه فرآیند جستجو - برمی‌گردونه True اگه هندل شد"""
     if user_id not in sessions:
         return False
     
@@ -69,14 +65,13 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
     step = session["step"]
     data = session["data"]
     
-    # ===== بررسی بازگشت =====
+    # ===== بازگشت =====
     if text == BTN_BACK:
         if step == "req_area":
             mode = search_modes.get(user_id, "simple")
             prev = "req_sub" if mode == "simple" else "req_return"
         else:
             prev = PREV_STEP.get(step)
-        
         if prev is None:
             sessions.pop(user_id, None)
             send_message(chat_id, "به منوی اصلی بازگشتید.", kb_main())
@@ -85,7 +80,6 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
             ask_for_step(chat_id, prev, data, search_modes.get(user_id, "simple"))
         return True
     
-    # ===== مرحله: انتخاب دسته =====
     if step == "req_cat":
         if not is_valid_category(text):
             send_message(chat_id, CHOOSE_OPTION, kb_categories())
@@ -98,14 +92,12 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
         send_message(chat_id, msg, kb_back())
         return True
     
-    # ===== مرحله: انتخاب زیرتخصص =====
     if step == "req_sub":
         nums = parse_numbers(text, len(data["_subs"]))
         if len(nums) != 1:
             send_message(chat_id, INVALID_INPUT, kb_back())
             return True
         data["sub"] = data["_subs"][nums[0]-1]
-        
         mode = search_modes.get(user_id, "simple")
         if mode == "adv":
             session["step"] = "req_priority"
@@ -116,7 +108,6 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
             send_message(chat_id, ASK_CUST_AREA, kb_location())
         return True
     
-    # ===== مرحله: اولویت‌ها (فقط جستجوی پیشرفته) =====
     if step == "req_priority":
         if text.strip() != "0" and text.strip() != "" and not parse_priorities(text, CRITERIA):
             send_message(chat_id, INVALID_INPUT, kb_back())
@@ -127,7 +118,6 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
         send_message(chat_id, msg, kb_back())
         return True
     
-    # ===== مرحله: زمان تحویل =====
     if step == "req_handover":
         n = parse_single_number(text, len(HANDOVER_TIMES))
         if n is None:
@@ -139,7 +129,6 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
         send_message(chat_id, msg, kb_back())
         return True
     
-    # ===== مرحله: زمان دریافت =====
     if step == "req_return":
         n = parse_single_number(text, len(RETURN_TIMES))
         if n is None:
@@ -150,66 +139,56 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
         send_message(chat_id, ASK_CUST_AREA, kb_location())
         return True
     
-    # ===== مرحله: محدوده (متن) =====
+    # ===== مرحله شهر (با Fuzzy Match) =====
     if step == "req_area":
-        # بررسی غلط تایپی شهر
-        similar = find_similar_cities(text.strip())
-        if similar and similar[0] != text.strip():
-            if len(similar) == 1:
-                # فقط یه شهر مشابه
-                data["_pending_area"] = text.strip()
-                data["_suggested_city"] = similar[0]
-                session["step"] = "req_fuzzy_confirm"
-                kb = {
-                    "inline_keyboard": [[
-                        {"text": FUZZY_YES, "callback_data": "fuzzy:yes"},
-                        {"text": FUZZY_NO, "callback_data": "fuzzy:no"}
-                    ]]
-                }
-                send_message(chat_id, FUZZY_CONFIRM.format(city=similar[0]), kb)
-                return True
-            elif len(similar) <= 3:
-                # چند شهر مشابه
-                data["_pending_area"] = text.strip()
-                data["_suggested_cities"] = similar[:3]
-                msg = FUZZY_MULTIPLE
-                for i, city in enumerate(similar[:3], 1):
-                    msg += "{}. {}\n".format(i, city)
-                session["step"] = "req_fuzzy_multiple"
-                send_message(chat_id, msg, kb_back())
-                return True
+        city_input = normalize_text(text.strip())
+        similar = find_similar_cities(city_input)
         
-        # تطبیق نداشت - مستقیم برو جلو
-        data["area"] = text.strip()
+        # اگه تطبیق دقیق بود
+        if similar and similar[0] == city_input:
+            data["area"] = city_input
+            session["step"] = "req_desc"
+            send_message(chat_id, ASK_DESC, kb_back())
+            return True
+        
+        # اگه یه شهر مشابه پیدا شد
+        if len(similar) == 1:
+            data["_pending_area"] = city_input
+            data["_suggested_city"] = similar[0]
+            session["step"] = "req_fuzzy_confirm"
+            send_message(chat_id, FUZZY_CONFIRM.format(city=similar[0]), kb_city_confirm(similar[0]))
+            return True
+        
+        # اگه چند شهر مشابه پیدا شد
+        if len(similar) > 1:
+            data["_pending_area"] = city_input
+            data["_suggested_cities"] = similar[:3]
+            session["step"] = "req_fuzzy_multiple"
+            msg = FUZZY_MULTIPLE
+            send_message(chat_id, msg, kb_city_multiple(similar[:3]))
+            return True
+        
+        # اگه هیچ شهری پیدا نشد → قبول کن ولی هشدار بده
+        data["area"] = city_input
         session["step"] = "req_desc"
-        send_message(chat_id, ASK_DESC, kb_back())
+        send_message(chat_id, "⚠️ شهر شما در لیست ما پیدا نشد، اما درخواستتان ثبت می‌شود.\n\n" + ASK_DESC, kb_back())
         return True
     
-    # ===== مرحله: تأیید شهر (تک پیشنهاد) =====
+    # ===== تأیید شهر (Fuzzy) =====
     if step == "req_fuzzy_confirm":
-        # این مرحله با callback هندل می‌شه، ولی اگه متن اومد:
         send_message(chat_id, "لطفاً از دکمه‌های بالا استفاده کنید.", kb_back())
         return True
     
-    # ===== مرحله: انتخاب از چند شهر =====
     if step == "req_fuzzy_multiple":
-        n = parse_single_number(text, len(data.get("_suggested_cities", [])))
-        if n is None:
-            send_message(chat_id, INVALID_INPUT, kb_back())
-            return True
-        data["area"] = data["_suggested_cities"][n]
-        session["step"] = "req_desc"
-        send_message(chat_id, ASK_DESC, kb_back())
+        send_message(chat_id, "لطفاً از دکمه‌های بالا استفاده کنید.", kb_back())
         return True
     
-    # ===== مرحله: توضیحات مشکل =====
     if step == "req_desc":
         data["desc"] = text.strip()
         session["step"] = "req_phone_share"
         send_message(chat_id, ASK_PHONE_SHARE, kb_yes_no())
         return True
     
-    # ===== مرحله: اشتراک شماره =====
     if step == "req_phone_share":
         if text not in [YES, NO]:
             send_message(chat_id, CHOOSE_OPTION, kb_yes_no())
@@ -224,7 +203,6 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
             send_message(chat_id, ASK_WHO_PICK, kb_who_picks())
         return True
     
-    # ===== مرحله: وارد کردن شماره =====
     if step == "req_phone_input":
         data["send_phone"] = True
         data["customer_phone"] = text.strip()
@@ -232,15 +210,12 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
         send_message(chat_id, ASK_WHO_PICK, kb_who_picks())
         return True
     
-    # ===== مرحله: انتخاب تعمیرکار =====
     if step == "req_who":
         if text not in [WHO_ME, WHO_SYS]:
             send_message(chat_id, CHOOSE_OPTION, kb_who_picks())
             return True
-        
         data["who"] = "me" if text == WHO_ME else "sys"
         
-        # جستجو
         results = find_matching(
             category=data["category"],
             sub=data["sub"],
@@ -252,7 +227,6 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
             cust_lng=data.get("lng"),
         )
         
-        # اگه با فیلتر زمانی پیدا نشد، دوباره بدون فیلتر
         if not results and data.get("handover") is not None:
             results = find_matching(
                 category=data["category"],
@@ -280,10 +254,8 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
         }
         
         if data["who"] == "sys":
-            # سیستم بهترین رو انتخاب می‌کنه
             deliver_expert(chat_id, user_id, results[0], info, data.get("send_phone", False))
         else:
-            # مشتری خودش انتخاب می‌کنه - نمایش ۳ گزینه
             txt = FOUND_EXPERTS
             if data.get("priorities"):
                 labels = "، ".join([c["label"] for c in CRITERIA if c["key"] in data["priorities"]])
@@ -291,15 +263,12 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
             for i, e in enumerate(results, 1):
                 txt += format_expert_line(e, i, data.get("priorities", [])) + "\n"
             txt += "\nیکی را انتخاب کنید:"
-            
             kb = {"inline_keyboard": []}
             for e in results:
                 kb["inline_keyboard"].append([
                     {"text": "✅ " + e["name"], "callback_data": "pick:" + str(e["user_id"])}
                 ])
             send_message(chat_id, txt, kb)
-            
-            # ذخیره نتایج برای callback
             session["step"] = "req_pick_waiting"
             session["data"]["_results"] = results
             session["data"]["_info"] = info
@@ -308,15 +277,12 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
     return False
 
 
-# ==================== مدیریت لوکیشن ====================
 def handle_location(chat_id, user_id, location, sessions):
-    """هندل ارسال لوکیشن در جستجو"""
     if user_id not in sessions:
         return False
     session = sessions[user_id]
     step = session["step"]
     data = session["data"]
-    
     if step == "req_area":
         data["lat"] = location.get("latitude")
         data["lng"] = location.get("longitude")
@@ -324,14 +290,53 @@ def handle_location(chat_id, user_id, location, sessions):
         session["step"] = "req_desc"
         send_message(chat_id, ASK_DESC, kb_back())
         return True
-    
     return False
 
 
-# ==================== جستجوی تطبیقی ====================
+def handle_city_fuzzy_callback(chat_id, user_id, action, sessions):
+    """هندل callback تأیید/رد شهر (Fuzzy)"""
+    if user_id not in sessions:
+        return False
+    session = sessions[user_id]
+    if session.get("step") != "req_fuzzy_confirm":
+        return False
+    data = session["data"]
+    if action == "yes" and data.get("_suggested_city"):
+        data["area"] = data["_suggested_city"]
+    else:
+        data["area"] = data.get("_pending_area", "")
+    session["step"] = "req_desc"
+    send_message(chat_id, ASK_DESC, kb_back())
+    return True
+
+
+def handle_city_multiple_callback(chat_id, user_id, choice, sessions):
+    """هندل انتخاب از چند شهر مشابه"""
+    if user_id not in sessions:
+        return False
+    session = sessions[user_id]
+    if session.get("step") != "req_fuzzy_multiple":
+        return False
+    data = session["data"]
+    cities = data.get("_suggested_cities", [])
+    if choice == "no":
+        data["area"] = data.get("_pending_area", "")
+    else:
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(cities):
+                data["area"] = cities[idx]
+            else:
+                data["area"] = data.get("_pending_area", "")
+        except:
+            data["area"] = data.get("_pending_area", "")
+    session["step"] = "req_desc"
+    send_message(chat_id, ASK_DESC, kb_back())
+    return True
+
+
 def find_matching(category, sub, area, needs_onsite, priorities,
                   handover=None, cust_lat=None, cust_lng=None):
-    """پیدا کردن تعمیرکاران منطبق"""
     all_match = []
     loc_match = []
     text_match = []
@@ -349,10 +354,8 @@ def find_matching(category, sub, area, needs_onsite, priorities,
             continue
         if not _matches_times(e, handover):
             continue
-        
         all_match.append(e)
         
-        # فیلتر لوکیشن
         if cust_lat and cust_lng and e.get("lat") and e.get("lng"):
             dist = haversine(cust_lat, cust_lng, e["lat"], e["lng"])
             if dist <= LOCATION_RADIUS_KM:
@@ -367,7 +370,6 @@ def find_matching(category, sub, area, needs_onsite, priorities,
                 if a_w & e_w:
                     text_match.append(e)
     
-    # انتخاب اولویت‌دار
     if cust_lat and cust_lng:
         result = loc_match if loc_match else (text_match if text_match else all_match)
     elif area:
@@ -375,13 +377,11 @@ def find_matching(category, sub, area, needs_onsite, priorities,
     else:
         result = all_match
     
-    # مرتب‌سازی بر اساس امتیاز
     result.sort(key=lambda x: _rank_score(x, priorities), reverse=True)
     return result[:3]
 
 
 def _matches_times(e, handover):
-    """بررسی تطبیق زمانی"""
     if handover is not None and handover < 3:
         rp = int(e.get("response_speed", 3))
         if handover == 0 and rp > 0:
@@ -394,7 +394,6 @@ def _matches_times(e, handover):
 
 
 def _rank_score(e, priorities=None):
-    """محاسبه امتیاز رتبه‌بندی"""
     if priorities:
         score = _priority_rating(e, priorities) * 40 + _overall_rating(e) * 10
     else:
@@ -444,7 +443,6 @@ def _priority_rating(e, priorities):
     return total / count
 
 
-# ==================== نمایش خط تعمیرکار ====================
 def format_expert_line(e, idx, priorities):
     txt = "{}. 👤 ".format(idx) + e["name"] + "\n"
     txt += "   📞 " + e["phone"] + "\n"
@@ -459,40 +457,24 @@ def format_expert_line(e, idx, priorities):
     return txt
 
 
-# ==================== تحویل تعمیرکار به مشتری ====================
 def deliver_expert(chat_id, customer_id, expert, info, send_phone):
-    """تحویل اطلاعات تعمیرکار به مشتری"""
     code = create_job(customer_id, chat_id, expert, info)
-    
     msg = CHOSEN_EXPERT
     msg += "👤 " + expert["name"] + "\n"
     msg += "📞 " + expert["phone"] + "\n"
     msg += "📍 " + expert.get("area", "?") + "\n"
     msg += LBL_TRACKING + code
     msg += TRACKING_NOTE
-    
-    # آیدی نظرات
-    from db import get_feedback_id
     fid = get_feedback_id()
     if fid:
         msg += "\n\n💬 نظرات و پیشنهادات: " + fid
-    
     send_message(chat_id, msg, kb_main())
-    
-    # اعلان به تعمیرکار
     notify_expert(expert, info, code, send_phone)
-    
-    # ارسال دکمه مسیریابی (اگه لوکیشن داره)
     if expert.get("lat") and expert.get("lng"):
-        send_message(
-            chat_id,
-            "📍 برای مسیریابی:",
-            kb_navigation(expert["lat"], expert["lng"])
-        )
+        send_message(chat_id, "📍 برای مسیریابی:", kb_navigation(expert["lat"], expert["lng"]))
 
 
 def notify_expert(expert, info, code, send_phone):
-    """اطلاع به تعمیرکار از مشتری جدید"""
     msg = NEW_CUSTOMER + "\n\n"
     msg += LBL_ROLE + " " + info.get("category", "?") + "\n"
     msg += LBL_SUBSPEC + " " + info.get("sub", "?") + "\n"
@@ -500,46 +482,35 @@ def notify_expert(expert, info, code, send_phone):
         msg += LBL_AREA + " " + info["area"] + "\n"
     msg += LBL_PROBLEM + " " + info.get("desc", "") + "\n\n"
     msg += LBL_TRACKING + code
-    
     if send_phone and info.get("phone"):
         msg += "\n\n📞 تماس مشتری: " + info["phone"]
     else:
         msg += "\n\nℹ️ مشتری خودش با شما تماس می‌گیرد."
-    
     send_message(expert["user_id"], msg)
 
 
-# ==================== هندل callback انتخاب تعمیرکار ====================
 def handle_pick_expert(chat_id, customer_id, expert_id, sessions):
-    """هندل کلیک مشتری روی تعمیرکار"""
     if customer_id not in sessions:
         return False
     session = sessions[customer_id]
     data = session.get("data", {})
-    
     results = data.get("_results", [])
     info = data.get("_info", {})
-    
     expert = None
     for e in results:
         if e.get("user_id") == expert_id:
             expert = e
             break
-    
     if not expert:
         expert = find_expert_by_id(expert_id)
-    
     if not expert:
         return False
-    
     deliver_expert(chat_id, customer_id, expert, info, data.get("send_phone", False))
     sessions.pop(customer_id, None)
     return True
 
 
-# ==================== نمایش مجدد مرحله ====================
 def ask_for_step(chat_id, step, data, mode):
-    """نمایش مجدد درخواست برای هر مرحله (برای بازگشت)"""
     if step == "req_cat":
         send_message(chat_id, CHOOSE_OPTION, kb_categories())
     elif step == "req_sub":
