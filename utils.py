@@ -5,14 +5,11 @@ from math import radians, sin, cos, sqrt, atan2
 from config import IRAN_CITIES, FUZZY_DISTANCE
 
 
-# ==================== توابع پایه ====================
 def gen_tracking_code():
-    """تولید کد پیگیری ۶ رقمی"""
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
 
 def gen_expert_code(name):
-    """تولید کد اختصاصی برای تعمیرکار"""
     base = "".join(c for c in name if c.isascii() and c.isalnum()).lower()
     if len(base) < 4:
         base = "expert"
@@ -21,7 +18,6 @@ def gen_expert_code(name):
 
 
 def haversine(lat1, lon1, lat2, lon2):
-    """محاسبه فاصله بین دو نقطه جغرافیایی (کیلومتر)"""
     R = 6371
     dlat = radians(lat2 - lat1)
     dlon = radians(lon2 - lon1)
@@ -31,7 +27,6 @@ def haversine(lat1, lon1, lat2, lon2):
 
 # ==================== تجزیه ورودی ====================
 def parse_numbers(text, max_num):
-    """تبدیل ورودی کاربر به لیست اعداد (مثلاً 1,3,5)"""
     text = text.replace("،", ",").replace(" ", ",")
     result = []
     for part in text.split(","):
@@ -48,13 +43,11 @@ def parse_numbers(text, max_num):
 
 
 def parse_single_number(text, max_num):
-    """تبدیل ورودی به یه عدد (اگه فقط یه عدد بود)"""
     nums = parse_numbers(text, max_num)
     return None if len(nums) != 1 else nums[0] - 1
 
 
 def parse_priorities(text, criteria):
-    """تبدیل ورودی اولویت‌ها به کلیدهای معیار"""
     text = text.strip().replace("،", ",").replace(" ", ",")
     if text == "0" or text == "":
         return []
@@ -73,23 +66,19 @@ def parse_priorities(text, criteria):
 
 
 def format_numbered_list(lst):
-    """نمایش لیست با شماره"""
     return "\n".join(["{}. {}".format(i, s) for i, s in enumerate(lst, 1)])
 
 
 def format_criteria_list(criteria):
-    """نمایش لیست معیارها با شماره"""
     return "\n".join(["{}. {}".format(i, c["label"]) for i, c in enumerate(criteria, 1)])
 
 
-# ==================== تشخیص غلط تایپی (Fuzzy) ====================
+# ==================== تشخیص غلط تایپی ====================
 def levenshtein_distance(s1, s2):
-    """محاسبه فاصله Levenshtein بین دو رشته"""
     if len(s1) < len(s2):
         return levenshtein_distance(s2, s1)
     if len(s2) == 0:
         return len(s1)
-    
     previous_row = range(len(s2) + 1)
     for i, c1 in enumerate(s1):
         current_row = [i + 1]
@@ -104,11 +93,19 @@ def levenshtein_distance(s1, s2):
 
 def find_similar_cities(input_city, max_distance=None):
     """پیدا کردن شهرهای مشابه با ورودی کاربر - با دامنه پویا"""
+    # اگه max_distance داده نشد، از تنظیمات بخون
+    if max_distance is None:
+        max_distance = FUZZY_DISTANCE
+    
     input_clean = input_city.strip().replace("ي", "ی").replace("ك", "ک")
+    if not input_clean:
+        return []
+    
     matches = []
     
     for city in IRAN_CITIES:
         city_clean = city.strip()
+        
         # اگه دقیقاً یکی بود
         if input_clean == city_clean:
             return [city]
@@ -132,7 +129,6 @@ def find_similar_cities(input_city, max_distance=None):
 
 
 def suggest_city(input_city):
-    """پیشنهاد شهر بر اساس ورودی"""
     matches = find_similar_cities(input_city)
     if not matches:
         return None
@@ -141,7 +137,6 @@ def suggest_city(input_city):
 
 # ==================== اعتبارسنجی ====================
 def is_valid_phone(phone):
-    """بررسی صحت شماره تلفن (ساده)"""
     phone = phone.strip().replace(" ", "").replace("-", "")
     if phone.startswith("+98"):
         phone = "0" + phone[3:]
@@ -151,12 +146,10 @@ def is_valid_phone(phone):
 
 
 def is_valid_name(name):
-    """بررسی صحت نام"""
     return len(name.strip()) >= 3 and len(name.strip()) <= 50
 
 
 def normalize_text(text):
-    """نرمال‌سازی متن فارسی"""
     if not text:
         return ""
     return text.strip().replace("ي", "ی").replace("ك", "ک").replace("ة", "ه")
@@ -164,22 +157,18 @@ def normalize_text(text):
 
 # ==================== کمکی ====================
 def truncate(text, max_len=100):
-    """کوتاه کردن متن طولانی"""
     if len(text) <= max_len:
         return text
     return text[:max_len-3] + "..."
 
 
 def days_to_seconds(days):
-    """تبدیل روز به ثانیه"""
     return days * 86400
 
 
 def seconds_to_days(seconds):
-    """تبدیل ثانیه به روز"""
     return int(seconds / 86400)
 
 
 def format_toman(amount):
-    """نمایش مبلغ به تومان با کاما"""
     return "{:,}".format(amount) + " تومان"
