@@ -270,23 +270,37 @@ def handle_callback(cb):
         answer_callback(cb_id, "خطا")
         return
     
-    # ===== callback fuzzy (تشخیص غلط تایپی) برای مشتری =====
-    if data.startswith("fuzzy:"):
+       # ===== callback تأیید شهر (Fuzzy) - ثبت‌نام =====
+    if data.startswith("regfuzzy:"):
         action = data.split(":")[1]
-        if user_id in sessions:
-            session = sessions[user_id]
-            data_dict = session.get("data", {})
-            if action == "yes" and data_dict.get("_suggested_city"):
-                data_dict["area"] = data_dict["_suggested_city"]
-            elif action == "no" and data_dict.get("_pending_area"):
-                data_dict["area"] = data_dict["_pending_area"]
-            session["step"] = "req_desc"
-            send_message(chat_id, "مشکل را توضیح دهید:", {"keyboard": [[{"text": "🔙 بازگشت"}]], "resize_keyboard": True})
-        answer_callback(cb_id)
+        from handlers.register import handle_city_fuzzy_callback
+        if handle_city_fuzzy_callback(chat_id, user_id, action, sessions):
+            answer_callback(cb_id)
+            return
+        answer_callback(cb_id, "خطا")
+        return
+    
+    # ===== callback تأیید شهر (Fuzzy) - مشتری =====
+    if data.startswith("cityfuzzy:"):
+        action = data.split(":")[1]
+        from handlers.search import handle_city_fuzzy_callback
+        if handle_city_fuzzy_callback(chat_id, user_id, action, sessions):
+            answer_callback(cb_id)
+            return
+        answer_callback(cb_id, "خطا")
+        return
+    
+    # ===== callback چند شهر مشابه =====
+    if data.startswith("citymulti:"):
+        choice = data.split(":")[1]
+        from handlers.search import handle_city_multiple_callback
+        if handle_city_multiple_callback(chat_id, user_id, choice, sessions):
+            answer_callback(cb_id)
+            return
+        answer_callback(cb_id, "خطا")
         return
     
     answer_callback(cb_id)
-
 
 # ==================== حلقه اصلی ====================
 def main():
