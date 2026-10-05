@@ -9,8 +9,8 @@ from texts import (
     CALL_DIRECT, NEW_CUSTOMER, CHOSEN_EXPERT, LBL_NAME, LBL_PHONE,
     LBL_AREA, LBL_RATING, LBL_SUBSPEC, LBL_ROLE, LBL_REFERRAL, LBL_ONSITE,
     LBL_TRACKING, TRACKING_NOTE, LBL_PROBLEM,
-    FUZZY_CONFIRM, FUZZY_YES, FUZZY_NO, FUZZY_MULTIPLE, FUZZY_NO_MATCH,
-    FUZZY_SUGGEST_LOCATION, FUZZY_SUGGEST_LOC_AFTER,
+    FUZZY_CONFIRM, FUZZY_YES, FUZZY_NO, FUZZY_MULTIPLE,
+    FUZZY_CITY_NOT_FOUND, FUZZY_LOCATION_HINT,
     BTN_NAV_NESHAN, BTN_NAV_GOOGLE,
 )
 from keyboards import (
@@ -49,6 +49,25 @@ PREV_STEP = {
     "req_fuzzy_confirm": "req_area",
     "req_fuzzy_multiple": "req_area",
 }
+
+
+def _normalize_city(text):
+    """نرمال‌سازی نام شهر"""
+    if not text:
+        return ""
+    return text.strip().replace("ي", "ی").replace("ك", "ک").replace("\u200c", "").replace(" ", "").replace("‌", "")
+
+
+def _find_exact_city(input_city):
+    """پیدا کردن تطبیق دقیق شهر"""
+    from config import IRAN_CITIES
+    normalized_input = _normalize_city(input_city)
+    if not normalized_input:
+        return None
+    for city in IRAN_CITIES:
+        if _normalize_city(city) == normalized_input:
+            return city
+    return None
 
 
 def start_search(chat_id, user_id, mode, sessions, search_modes):
@@ -141,17 +160,30 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
     
     # ===== مرحله شهر (با Fuzzy Match) =====
     if step == "req_area":
-        city_input = normalize_text(text.strip())
-        similar = find_similar_cities(city_input)
+        city_input = text.strip()
         
-        # اگه تطبیق دقیق بود
-        if similar and similar[0] == city_input:
-            data["area"] = city_input
+        # مرحله ۱: تطبیق دقیق
+        exact = _find_exact_city(city_input)
+        if exact:
+            data["area"] = exact
             session["step"] = "req_desc"
             send_message(chat_id, ASK_DESC, kb_back())
             return True
         
-        # اگه یه شهر مشابه پیدا شد
+        # مرحله ۲: Fuzzy Match
+        similar = find_similar_cities(city_input)
+        
+        # اگه هیچ شهری پیدا نشد → خطا + درخواست دوباره
+        if not similar:
+            session["step"] = "req_area"  # بمون توی همون مرحله
+            send_message(
+                chat_id,
+                FUZZY_CITY_NOT_FOUND.format(city=city_input),
+                kb_location()
+            )
+            return True
+        
+        # یه شهر مشابه
         if len(similar) == 1:
             data["_pending_area"] = city_input
             data["_suggested_city"] = similar[0]
@@ -159,22 +191,15 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
             send_message(chat_id, FUZZY_CONFIRM.format(city=similar[0]), kb_city_confirm(similar[0]))
             return True
         
-        # اگه چند شهر مشابه پیدا شد
+        # چند شهر مشابه
         if len(similar) > 1:
             data["_pending_area"] = city_input
             data["_suggested_cities"] = similar[:3]
             session["step"] = "req_fuzzy_multiple"
-            msg = FUZZY_MULTIPLE
-            send_message(chat_id, msg, kb_city_multiple(similar[:3]))
+            send_message(chat_id, FUZZY_MULTIPLE, kb_city_multiple(similar[:3]))
             return True
-        
-        # اگه هیچ شهری پیدا نشد → قبول کن ولی هشدار بده
-        data["area"] = city_input
-        session["step"] = "req_desc"
-        send_message(chat_id, "⚠️ شهر شما در لیست ما پیدا نشد، اما درخواستتان ثبت می‌شود.\n\n" + ASK_DESC, kb_back())
-        return True
     
-    # ===== تأیید شهر (Fuzzy) =====
+    # ===== تأیید Fuzzy =====
     if step == "req_fuzzy_confirm":
         send_message(chat_id, "لطفاً از دکمه‌های بالا استفاده کنید.", kb_back())
         return True
@@ -283,18 +308,26 @@ def handle_location(chat_id, user_id, location, sessions):
     session = sessions[user_id]
     step = session["step"]
     data = session["data"]
+    
+    # مشتری در مرحله شهر، لوکیشن فرستاده
     if step == "req_area":
         data["lat"] = location.get("latitude")
         data["lng"] = location.get("longitude")
         data["area"] = ""
         session["step"] = "req_desc"
-        send_message(chat_id, ASK_DESC, kb_back())
+        send_message(chat_id, FUZZY_LOCATION_HINT, kb_back())
         return True
+    
+    # تعمیرکار در مرحله لوکیشن
+    if step == "reg_location":
+        data["lat"] = location.get("latitude")
+        data["lng"] = location.get("longitude")
+        return False
+    
     return False
 
 
 def handle_city_fuzzy_callback(chat_id, user_id, action, sessions):
-    """هندل callback تأیید/رد شهر (Fuzzy)"""
     if user_id not in sessions:
         return False
     session = sessions[user_id]
@@ -311,7 +344,6 @@ def handle_city_fuzzy_callback(chat_id, user_id, action, sessions):
 
 
 def handle_city_multiple_callback(chat_id, user_id, choice, sessions):
-    """هندل انتخاب از چند شهر مشابه"""
     if user_id not in sessions:
         return False
     session = sessions[user_id]
