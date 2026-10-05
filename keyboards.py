@@ -104,13 +104,11 @@ def kb_share_link(url):
 
 
 def kb_navigation(lat, lng):
-    """دکمه‌های مسیریابی - نشان (اپ) + نشان (وب) + گوگل مپ"""
-    neshan_app = "neshan://maps?lat={}&lng={}".format(lat, lng)
+    """دکمه‌های مسیریابی - نشان (وب) + گوگل مپ"""
     neshan_web = "https://neshan.org/maps/@{},{}".format(lat, lng)
     google_url = "https://www.google.com/maps?q={},{}".format(lat, lng)
     return {"inline_keyboard": [
-        [{"text": BTN_NAV_NESHAN, "url": neshan_app}],
-        [{"text": "🌐 نشان (وب)", "url": neshan_web}],
+        [{"text": BTN_NAV_NESHAN, "url": neshan_web}],
         [{"text": BTN_NAV_GOOGLE, "url": google_url}]
     ]}
 
