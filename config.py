@@ -34,7 +34,7 @@ ENABLE_QA = False
 ENABLE_TELEGRAM = False
 
 # ==================== تنظیمات قابلیت‌ها ====================
-FUZZY_DISTANCE = 2
+FUZZY_DISTANCE = 3
 LOCATION_RADIUS_KM = 20
 RATE_LIMIT_REPORTS = 3
 SESSION_TIMEOUT = 1800
