@@ -1,6 +1,6 @@
 # ==================== ثبت‌نام تعمیرکار ====================
 import time
-from config import DB_FILE
+from config import DB_FILE, IRAN_CITIES
 from texts import (
     CAT_ELEC, CAT_GAS, CAT_COOL, CAT_CAR,
     YES, NO, CHOOSE_OPTION, INVALID_INPUT, BTN_BACK,
@@ -71,11 +71,32 @@ def is_valid_category(text):
     return text in [CAT_ELEC, CAT_GAS, CAT_COOL, CAT_CAR]
 
 
+# ==================== نرمال‌سازی شهر ====================
+def _normalize_city(text):
+    """نرمال‌سازی نام شهر برای مقایسه دقیق"""
+    if not text:
+        return ""
+    return text.strip().replace("ي", "ی").replace("ك", "ک").replace("\u200c", "").replace(" ", "").replace("‌", "")
+
+
+def _find_exact_city(input_city):
+    """پیدا کردن تطبیق دقیق شهر (با نرمال‌سازی)"""
+    normalized_input = _normalize_city(input_city)
+    if not normalized_input:
+        return None
+    for city in IRAN_CITIES:
+        if _normalize_city(city) == normalized_input:
+            return city
+    return None
+
+
+# ==================== شروع ثبت‌نام ====================
 def start_registration(chat_id, user_id, sessions):
     sessions[user_id] = {"step": "reg_cat", "data": {}}
     send_message(chat_id, CHOOSE_OPTION, kb_categories())
 
 
+# ==================== ادامه ثبت‌نام ====================
 def continue_registration(chat_id, user_id, text, sessions):
     if user_id not in sessions:
         return False
@@ -84,6 +105,7 @@ def continue_registration(chat_id, user_id, text, sessions):
     step = session["step"]
     data = session["data"]
     
+    # ===== بازگشت =====
     if text == BTN_BACK:
         prev = PREV_STEP.get(step)
         if prev is None:
@@ -95,6 +117,7 @@ def continue_registration(chat_id, user_id, text, sessions):
             ask_for_step(chat_id, prev, data)
         return True
     
+    # ===== مرحله: انتخاب دسته =====
     if step == "reg_cat":
         if not is_valid_category(text):
             send_message(chat_id, CHOOSE_OPTION, kb_categories())
@@ -107,6 +130,7 @@ def continue_registration(chat_id, user_id, text, sessions):
         send_message(chat_id, msg, kb_back())
         return True
     
+    # ===== مرحله: انتخاب زیرتخصص‌ها =====
     if step == "reg_subs":
         nums = parse_numbers(text, len(data["_subs"]))
         if not nums:
@@ -117,31 +141,46 @@ def continue_registration(chat_id, user_id, text, sessions):
         send_message(chat_id, ASK_NAME, kb_back())
         return True
     
+    # ===== مرحله: نام =====
     if step == "reg_name":
         data["name"] = text.strip()
         session["step"] = "reg_phone"
         send_message(chat_id, ASK_PHONE, kb_back())
         return True
     
+    # ===== مرحله: تلفن =====
     if step == "reg_phone":
         data["phone"] = text.strip()
         session["step"] = "reg_city"
         send_message(chat_id, ASK_CITY, kb_text_only())
         return True
     
-    # ===== مرحله شهر با تشخیص غلط تایپی =====
+    # ===== مرحله: شهر با Fuzzy Match =====
     if step == "reg_city":
         city_input = text.strip()
-        similar = find_similar_cities(city_input)
         
-        # اگه تطبیق دقیق بود یا هیچی پیدا نشد
-        if not similar or similar[0] == city_input:
-            data["city"] = city_input
+        # مرحله ۱: تطبیق دقیق (با نرمال‌سازی)
+        exact = _find_exact_city(city_input)
+        if exact:
+            data["city"] = exact
             session["step"] = "reg_area"
             send_message(chat_id, ASK_AREA, kb_text_only())
             return True
         
-        # یه شهر مشابه
+        # مرحله ۲: Fuzzy Match
+        similar = find_similar_cities(city_input)
+        
+        # هیچ شهری پیدا نشد → خطا
+        if not similar:
+            send_message(
+                chat_id,
+                "❌ شهر «{}» توی لیست شهرهای ما پیدا نشد.\n\n"
+                "لطفاً دوباره امتحان کنید یا اسم شهر نزدیک‌تر رو وارد کنید:".format(city_input),
+                kb_text_only()
+            )
+            return True
+        
+        # یه شهر مشابه پیدا شد → تأیید
         if len(similar) == 1:
             data["_pending_city"] = city_input
             data["_suggested_city"] = similar[0]
@@ -155,7 +194,7 @@ def continue_registration(chat_id, user_id, text, sessions):
             send_message(chat_id, FUZZY_CONFIRM.format(city=similar[0]), kb)
             return True
         
-        # چند شهر مشابه
+        # چند شهر مشابه → کاربر انتخاب کنه
         data["_pending_city"] = city_input
         data["_suggested_cities"] = similar[:3]
         session["step"] = "reg_city_multiple"
@@ -165,6 +204,7 @@ def continue_registration(chat_id, user_id, text, sessions):
         send_message(chat_id, msg, kb_back())
         return True
     
+    # ===== انتخاب از چند شهر =====
     if step == "reg_city_multiple":
         n = parse_single_number(text, len(data.get("_suggested_cities", [])))
         if n is None:
@@ -175,6 +215,7 @@ def continue_registration(chat_id, user_id, text, sessions):
         send_message(chat_id, ASK_AREA, kb_text_only())
         return True
     
+    # ===== مرحله: محدوده (محله) =====
     if step == "reg_area":
         neighborhood = text.strip()
         city = data.get("city", "")
@@ -186,6 +227,7 @@ def continue_registration(chat_id, user_id, text, sessions):
         send_message(chat_id, ASK_LOCATION, kb_yes_no())
         return True
     
+    # ===== پرسیدن لوکیشن =====
     if step == "reg_ask_location":
         if text not in [YES, NO]:
             send_message(chat_id, CHOOSE_OPTION, kb_yes_no())
@@ -198,10 +240,12 @@ def continue_registration(chat_id, user_id, text, sessions):
             send_message(chat_id, ASK_ONSITE, kb_yes_no())
         return True
     
+    # ===== لوکیشن =====
     if step == "reg_location":
         send_message(chat_id, ASK_SEND_LOCATION, kb_location())
         return True
     
+    # ===== حضور در محل =====
     if step == "reg_onsite":
         if text not in [YES, NO]:
             send_message(chat_id, CHOOSE_OPTION, kb_yes_no())
@@ -212,6 +256,7 @@ def continue_registration(chat_id, user_id, text, sessions):
         send_message(chat_id, msg, kb_back())
         return True
     
+    # ===== سرعت پاسخگویی =====
     if step == "reg_response":
         n = parse_single_number(text, len(RESPONSE_TIMES))
         if n is None:
@@ -223,6 +268,7 @@ def continue_registration(chat_id, user_id, text, sessions):
         send_message(chat_id, msg, kb_back())
         return True
     
+    # ===== زمان تعمیر =====
     if step == "reg_repair":
         n = parse_single_number(text, len(REPAIR_TIMES))
         if n is None:
@@ -235,13 +281,13 @@ def continue_registration(chat_id, user_id, text, sessions):
     return False
 
 
+# ==================== مدیریت لوکیشن ====================
 def handle_location(chat_id, user_id, location, sessions):
     if user_id not in sessions:
         return False
     session = sessions[user_id]
     step = session["step"]
     data = session["data"]
-    
     if step == "reg_location":
         data["lat"] = location.get("latitude")
         data["lng"] = location.get("longitude")
@@ -252,14 +298,13 @@ def handle_location(chat_id, user_id, location, sessions):
     return False
 
 
+# ==================== هندل callback شهر ====================
 def handle_city_fuzzy_callback(chat_id, user_id, action, sessions):
-    """هندل callback تشخیص غلط تایپی شهر در ثبت‌نام"""
     if user_id not in sessions:
         return False
     session = sessions[user_id]
     if session.get("step") != "reg_city_confirm":
         return False
-    
     data = session["data"]
     if action == "yes" and data.get("_suggested_city"):
         data["city"] = data["_suggested_city"]
@@ -267,12 +312,12 @@ def handle_city_fuzzy_callback(chat_id, user_id, action, sessions):
         data["city"] = data["_pending_city"]
     else:
         data["city"] = data.get("_pending_city", "")
-    
     session["step"] = "reg_area"
     send_message(chat_id, ASK_AREA, kb_text_only())
     return True
 
 
+# ==================== نهایی‌سازی ====================
 def finalize_registration(chat_id, user_id, data, sessions):
     data["user_id"] = user_id
     data["is_premium"] = False
@@ -314,6 +359,7 @@ def finalize_registration(chat_id, user_id, data, sessions):
         print("Notify admins error:", str(ex)[:100])
 
 
+# ==================== نمایش مجدد مرحله ====================
 def ask_for_step(chat_id, step, data):
     if step == "reg_cat":
         send_message(chat_id, CHOOSE_OPTION, kb_categories())
