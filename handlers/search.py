@@ -434,6 +434,12 @@ def _rank_score(e, priorities=None):
         score += 50
     if e.get("works_on_site"):
         score += 10
+    # امتیاز منفی اگه بعد از ۲ ماه شارژ نداره
+    try:
+        from db import get_expert_priority_penalty
+        score += get_expert_priority_penalty(e)
+    except:
+        pass
     return score
 
 
