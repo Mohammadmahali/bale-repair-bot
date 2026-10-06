@@ -208,7 +208,7 @@ def handle_message(msg):
     if text == BTN_FEEDBACK:
         do_feedback(chat_id); return
 
-        if text == BTN_WALLET:
+    if text == BTN_WALLET:
         show_wallet(chat_id, user_id); return
     
     if text == BTN_CHARGE_WALLET:
