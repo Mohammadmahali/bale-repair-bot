@@ -11,6 +11,7 @@ from texts import (
     ADM_ADD_OP, ADM_RM_OP, ADM_APPROVE, ADM_REJECT, ADM_BACK,
     ADM_TOGGLE_ON, ADM_TOGGLE_OFF, ADM_PREMIUM_ON, ADM_PREMIUM_OFF, ADM_DELETE,
     BTN_NAV_NESHAN, BTN_NAV_GOOGLE,
+    BTN_WALLET, BTN_CHARGE_WALLET,
 )
 
 
@@ -164,3 +165,17 @@ def kb_city_multiple(cities):
         ])
     keyboard.append([{"text": "❌ هیچکدام", "callback_data": "citymulti:no"}])
     return {"inline_keyboard": keyboard}
+
+
+def kb_wallet():
+    return {"keyboard": [
+        [{"text": BTN_CHARGE_WALLET}],
+        [{"text": BTN_BACK}]
+    ], "resize_keyboard": True}
+
+
+def kb_wallet_admin(txn_id):
+    return {"inline_keyboard": [[
+        {"text": "✅ تأیید", "callback_data": "wadm:approve:" + str(txn_id)},
+        {"text": "❌ رد", "callback_data": "wadm:reject:" + str(txn_id)}
+    ]]}
