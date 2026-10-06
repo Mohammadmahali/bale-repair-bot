@@ -3,7 +3,7 @@
 import json
 import time
 import database as db_sql
-from config import DEFAULT_PASSWORD, FEEDBACK_ID, FREE_CUSTOMERS
+from config import DEFAULT_PASSWORD, FEEDBACK_ID
 from utils import gen_tracking_code, gen_expert_code
 
 
