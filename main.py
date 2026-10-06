@@ -305,6 +305,13 @@ def handle_callback(cb):
 # ==================== حلقه اصلی ====================
 def main():
     print("Bot is starting...")
+    
+    # راه‌اندازی SQLite
+    from database import init_db, migrate_from_json
+    init_db()
+    print("Database initialized")
+    migrate_from_json()
+    print("Migration check done")
     print("Token:", TOKEN[:10] + "..." if len(TOKEN) > 10 else TOKEN)
     
     # حذف Webhook
