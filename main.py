@@ -42,8 +42,8 @@ from texts import WELCOME, BTN_REGISTER, BTN_SEARCH_SIMPLE, BTN_SEARCH_ADVANCED,
     BTN_WALLET, BTN_CHARGE_WALLET, \    BTN_EXPERTS_LIST, BTN_MY_PROFILE, BTN_FEEDBACK, BTN_SHOP_STATUS, \
     USE_MENU, YES, NO, SHOP_ACTIVE, SHOP_CLOSED_TEMP, SHOP_CLOSED_PERM, \
     ADM_STATS, ADM_EXPERTS, ADM_PENDING, ADM_JOBS, ADM_REVENUE, \
-    ADM_OPERATORS, ADM_CHANGE_PASS, ADM_EXIT
-
+    ADM_OPERATORS, ADM_CHANGE_PASS, ADM_EXIT,
+    BTN_WALLET, BTN_CHARGE_WALLET
 # Handlers
 from handlers.start import handle_start, handle_experts_list, handle_feedback
 from handlers.register import (
@@ -170,7 +170,25 @@ def handle_message(msg):
         if step.startswith("shop_"):
             if continue_shop_close(chat_id, user_id, text, sessions):
                 return
-    
+            
+        # شارژ کیف پول - مبلغ
+        if step == "wallet_amount":
+            if text == BTN_BACK:
+                sessions.pop(user_id, None)
+                show_wallet(chat_id, user_id)
+                return
+            if handle_amount(chat_id, user_id, text, sessions):
+                return
+        
+        # شارژ کیف پول - منتظر عکس
+        if step == "wallet_receipt":
+            if text == BTN_BACK:
+                sessions.pop(user_id, None)
+                send_message(chat_id, "لغو شد.", kb_main())
+                return
+            send_message(chat_id, "لطفاً عکس رسید را ارسال کنید.", kb_back())
+            return
+            
     # ===== منوی اصلی =====
     if text == BTN_REGISTER:
         start_registration(chat_id, user_id, sessions); return
