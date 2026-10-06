@@ -39,7 +39,7 @@ from api import (
 )
 from keyboards import kb_main
 from texts import WELCOME, BTN_REGISTER, BTN_SEARCH_SIMPLE, BTN_SEARCH_ADVANCED, \
-    BTN_EXPERTS_LIST, BTN_MY_PROFILE, BTN_FEEDBACK, BTN_SHOP_STATUS, \
+    BTN_WALLET, BTN_CHARGE_WALLET, \    BTN_EXPERTS_LIST, BTN_MY_PROFILE, BTN_FEEDBACK, BTN_SHOP_STATUS, \
     USE_MENU, YES, NO, SHOP_ACTIVE, SHOP_CLOSED_TEMP, SHOP_CLOSED_PERM, \
     ADM_STATS, ADM_EXPERTS, ADM_PENDING, ADM_JOBS, ADM_REVENUE, \
     ADM_OPERATORS, ADM_CHANGE_PASS, ADM_EXIT
@@ -54,6 +54,9 @@ from handlers.search import (
     handle_pick_expert,
 )
 from handlers.profile import show_profile
+from handlers.wallet import (
+    show_wallet, start_charge, handle_amount, handle_receipt,
+)
 from handlers.rating import (
     start_rating, handle_rating_callback, check_followups,
 )
@@ -90,6 +93,16 @@ def handle_message(msg):
     location = msg.get("location")
     
     print(">>>", user_id, text[:30].encode("ascii", "replace").decode())
+
+    # ===== عکس (رسید شارژ) =====
+    if "photo" in msg:
+        photos = msg.get("photo", [])
+        if photos and user_id in sessions:
+            if sessions[user_id].get("step") == "wallet_receipt":
+                message_id = msg.get("message_id")
+                handle_receipt(chat_id, user_id, message_id, sessions)
+                return
+        return
     
     # ===== لوکیشن =====
     if location:
@@ -176,6 +189,12 @@ def handle_message(msg):
     
     if text == BTN_FEEDBACK:
         do_feedback(chat_id); return
+
+        if text == BTN_WALLET:
+        show_wallet(chat_id, user_id); return
+    
+    if text == BTN_CHARGE_WALLET:
+        start_charge(chat_id, user_id, sessions); return
     
     if text == BTN_SHOP_STATUS:
         show_shop_status(chat_id, user_id); return
@@ -208,6 +227,29 @@ def handle_callback(cb):
             return
         answer_callback(cb_id, "دسترسی ندارید")
         return
+
+  # ===== callback تأیید/رد شارژ کیف پول =====
+    if data.startswith("wadm:"):
+        if not is_authed_admin(user_id, admin_sessions):
+            answer_callback(cb_id, "دسترسی ندارید")
+            return
+        parts = data.split(":")
+        if len(parts) >= 3:
+            action = parts[1]
+            try:
+                txn_id = int(parts[2])
+            except:
+                answer_callback(cb_id, "خطا")
+                return
+            if action == "approve":
+                from admin import approve_wallet_txn
+                approve_wallet_txn(txn_id, chat_id, user_id)
+            elif action == "reject":
+                from admin import reject_wallet_txn
+                reject_wallet_txn(txn_id, chat_id, user_id)
+        answer_callback(cb_id)
+        return
+    
     
     # ===== callback star (امتیاز) =====
     if data.startswith("crit:"):
