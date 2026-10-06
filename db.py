@@ -296,3 +296,95 @@ def save_admin_config(config):
     if "tariffs" in config:
         db_sql.config_set("tariffs", config["tariffs"])
     return True
+
+
+
+# ==================== کیف پول ====================
+def get_wallet_balance(user_id):
+    """گرفتن موجودی کیف پول"""
+    e = db_sql.get_expert(user_id)
+    if not e:
+        return 0
+    return e.get("wallet_balance", 0)
+
+
+def add_to_wallet(user_id, amount):
+    """اضافه کردن به کیف پول"""
+    e = db_sql.get_expert(user_id)
+    if not e:
+        return False
+    new_balance = e.get("wallet_balance", 0) + amount
+    db_sql.update_expert(user_id, "wallet_balance", new_balance)
+    return True
+
+
+def subtract_from_wallet(user_id, amount):
+    """کم کردن از کیف پول"""
+    e = db_sql.get_expert(user_id)
+    if not e:
+        return False
+    new_balance = max(0, e.get("wallet_balance", 0) - amount)
+    db_sql.update_expert(user_id, "wallet_balance", new_balance)
+    return True
+
+
+def create_wallet_charge_request(user_id, amount, receipt_message_id):
+    """ساخت درخواست شارژ"""
+    return db_sql.create_wallet_request(user_id, amount, receipt_message_id)
+
+
+def approve_wallet_charge(txn_id, admin_id):
+    """تأیید شارژ کیف پول"""
+    import time
+    txn = db_sql.get_wallet_transaction(txn_id)
+    if not txn or txn.get("status") != "pending":
+        return None
+    db_sql.update_wallet_transaction(txn_id, "status", "approved")
+    db_sql.update_wallet_transaction(txn_id, "reviewed_at", int(time.time()))
+    db_sql.update_wallet_transaction(txn_id, "reviewed_by", admin_id)
+    add_to_wallet(txn["expert_id"], txn["amount"])
+    return txn
+
+
+def reject_wallet_charge(txn_id, admin_id, reason=""):
+    """رد شارژ کیف پول"""
+    import time
+    txn = db_sql.get_wallet_transaction(txn_id)
+    if not txn or txn.get("status") != "pending":
+        return None
+    db_sql.update_wallet_transaction(txn_id, "status", "rejected")
+    db_sql.update_wallet_transaction(txn_id, "reviewed_at", int(time.time()))
+    db_sql.update_wallet_transaction(txn_id, "reviewed_by", admin_id)
+    db_sql.update_wallet_transaction(txn_id, "reject_reason", reason)
+    return txn
+
+
+def get_expert_wallet_history(user_id, limit=10):
+    """تاریخچه تراکنش‌ها"""
+    return db_sql.get_expert_wallet_history(user_id, limit)
+
+
+def is_expert_in_free_period(expert):
+    """آیا تعمیرکار توی ۲ ماه اول هست؟"""
+    from config import FREE_DAYS
+    created_at = expert.get("created_at", 0)
+    if not created_at:
+        return True
+    now = int(time.time())
+    free_until = created_at + (FREE_DAYS * 86400)
+    return now < free_until
+
+
+def get_expert_priority_penalty(expert):
+    """امتیاز منفی اگه بعد از ۲ ماه شارژ نداره"""
+    from config import TARIFFS
+    if is_expert_in_free_period(expert):
+        return 0
+    balance = expert.get("wallet_balance", 0)
+    if balance <= 0:
+        return -100
+    category = expert.get("category", "")
+    tariff = TARIFFS.get(category, 50000)
+    if balance < tariff:
+        return -30
+    return 0
