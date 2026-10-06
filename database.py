@@ -74,7 +74,22 @@ def init_db():
                 value TEXT
             )
         """)
-        
+
+        # جدول تراکنش‌های کیف پول
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS wallet_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                expert_id INTEGER,
+                amount INTEGER,
+                type TEXT,
+                status TEXT DEFAULT 'pending',
+                receipt_message_id INTEGER,
+                created_at INTEGER,
+                reviewed_at INTEGER,
+                reviewed_by INTEGER,
+                reject_reason TEXT DEFAULT ''
+            )
+        """)      
         # جدول کاربران (برای اتصال بله-تلگرام)
         c.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -84,6 +99,21 @@ def init_db():
         """)
         
         conn.commit()
+        # جدول تراکنش‌های کیف پول
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS wallet_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                expert_id INTEGER,
+                amount INTEGER,
+                type TEXT,
+                status TEXT DEFAULT 'pending',
+                receipt_message_id INTEGER,
+                created_at INTEGER,
+                reviewed_at INTEGER,
+                reviewed_by INTEGER,
+                reject_reason TEXT DEFAULT ''
+            )
+        """)
         conn.close()
 
 
@@ -396,3 +426,64 @@ def migrate_from_json():
                 print("Migrated config from JSON")
         except Exception as e:
             print("Config migration error:", str(e)[:100])
+
+# ==================== کیف پول ====================
+def create_wallet_request(expert_id, amount, receipt_message_id):
+    """ساخت درخواست شارژ کیف پول"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        now = int(__import__("time").time())
+        c.execute("""
+            INSERT INTO wallet_transactions
+            (expert_id, amount, type, status, receipt_message_id, created_at)
+            VALUES (?, ?, 'charge', 'pending', ?, ?)
+        """, (expert_id, amount, receipt_message_id, now))
+        txn_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        return txn_id
+
+
+def get_wallet_transaction(txn_id):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM wallet_transactions WHERE id = ?", (txn_id,))
+        row = c.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+
+def update_wallet_transaction(txn_id, field, value):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("UPDATE wallet_transactions SET {} = ? WHERE id = ?".format(field), (value, txn_id))
+        conn.commit()
+        conn.close()
+
+
+def get_pending_wallet_requests():
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM wallet_transactions WHERE status = 'pending' ORDER BY created_at DESC")
+        rows = c.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+
+def get_expert_wallet_history(expert_id, limit=10):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""
+            SELECT * FROM wallet_transactions
+            WHERE expert_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (expert_id, limit))
+        rows = c.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
