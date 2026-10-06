@@ -6,6 +6,7 @@ from db import (
     update_expert_field, get_stats, load_jobs,
     get_operators, add_operator, remove_operator,
     get_user_password, set_user_password, load_admin_config,
+    get_wallet_balance, approve_wallet_charge, reject_wallet_charge,
 )
 from api import send_message
 from keyboards import (
@@ -353,3 +354,51 @@ def show_pending_reports(chat_id):
             ]]
         }
         send_message(chat_id, txt, kb)
+
+
+# ==================== تأیید/رد شارژ کیف پول ====================
+def approve_wallet_txn(txn_id, chat_id, admin_id):
+    """تأیید شارژ کیف پول"""
+    from texts import WALLET_APPROVED_NOTIFY
+    from api import send_message
+    
+    txn = approve_wallet_charge(txn_id, admin_id)
+    if not txn:
+        send_message(chat_id, "❌ تراکنش پیدا نشد یا قبلاً بررسی شده.")
+        return
+    
+    # پیام به مدیر
+    send_message(chat_id, "✅ تأیید شد. کیف پول تعمیرکار شارژ شد.")
+    
+    # پیام به تعمیرکار
+    try:
+        balance = get_wallet_balance(txn["expert_id"])
+        send_message(
+            txn["expert_id"],
+            WALLET_APPROVED_NOTIFY.format(
+                amount="{:,}".format(txn["amount"]),
+                balance="{:,}".format(balance)
+            )
+        )
+    except Exception as ex:
+        print("Wallet notify error:", str(ex)[:100])
+
+
+def reject_wallet_txn(txn_id, chat_id, admin_id):
+    """رد شارژ کیف پول"""
+    from texts import WALLET_REJECTED_NOTIFY
+    from api import send_message
+    
+    txn = reject_wallet_charge(txn_id, admin_id, "رسید نامعتبر")
+    if not txn:
+        send_message(chat_id, "❌ تراکنش پیدا نشد یا قبلاً بررسی شده.")
+        return
+    
+    send_message(chat_id, "❌ رد شد.")
+    try:
+        send_message(
+            txn["expert_id"],
+            WALLET_REJECTED_NOTIFY.format(reason="رسید نامعتبر")
+        )
+    except Exception as ex:
+        print("Wallet notify error:", str(ex)[:100])
