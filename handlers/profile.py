@@ -1,4 +1,7 @@
 # ==================== پروفایل تعمیرکار ====================
+import time
+import config
+from config import DB_FILE, FREE_DAYS
 from texts import (
     MY_PROFILE, NO_PROFILE, YES, NO,
     LBL_NAME, LBL_ROLE, LBL_SUBSPEC, LBL_AREA, LBL_PHONE, LBL_ONSITE,
@@ -7,122 +10,18 @@ from texts import (
     SHOP_STATUS_TITLE, SHOP_ACTIVE, SHOP_CLOSED_TEMP, SHOP_CLOSED_PERM,
     SHOP_COUNTDOWN, SHOP_DAYS,
     RESPONSE_TIMES, REPAIR_TIMES,
-    BTN_SHOP_STATUS,
+    BTN_SHOP_STATUS, BTN_WALLET, BTN_BACK,
 )
 from keyboards import kb_main, kb_share_link
 from api import send_message
-from db import find_expert_by_id, is_shop_open, load_experts, save_experts
+from db import find_expert_by_id, is_shop_open
 from utils import gen_expert_code
-from config import BOT_USERNAME, DB_FILE
-from db import find_expert_by_id, is_shop_open, load_experts, save_experts
+from db import load_experts, save_experts
 
 
-# ==================== نمایش پروفایل ====================
-def show_profile(chat_id, user_id):
-    """نمایش پروفایل تعمیرکار"""
-    expert = find_expert_by_id(user_id)
-    if not expert:
-        send_message(chat_id, NO_PROFILE, kb_main())
-        return
-    
-    txt = MY_PROFILE
-    txt += LBL_NAME + " " + expert.get("name", "?") + "\n"
-    txt += LBL_ROLE + " " + expert.get("category", "?") + "\n"
-    txt += LBL_SUBSPEC + " " + "، ".join(expert.get("sub_specialties", [])) + "\n"
-    txt += LBL_AREA + " " + expert.get("area", "?") + "\n"
-    txt += LBL_PHONE + " " + expert.get("phone", "?") + "\n"
-    txt += LBL_ONSITE + " " + (YES if expert.get("works_on_site") else NO) + "\n"
-    
-    # سرعت پاسخگویی
-    resp = int(expert.get("response_speed", 0))
-    txt += "⏱ " + RESPONSE_TIMES[resp] + "\n"
-    
-    # زمان تعمیر
-    rep = int(expert.get("repair_time", 0))
-    txt += "🔧 " + REPAIR_TIMES[rep] + "\n"
-    
-    # وضعیت مغازه
-    txt += "\n" + SHOP_STATUS_TITLE
-    shop = expert.get("shop_status", "active")
-    if shop == "active":
-        txt += SHOP_ACTIVE + "\n"
-    elif shop == "closed_temp":
-        closed_until = expert.get("closed_until", 0)
-        import time as t
-        if closed_until > t.time():
-            days = max(1, int((closed_until - t.time()) / 86400) + 1)
-            txt += SHOP_CLOSED_TEMP + " (" + SHOP_COUNTDOWN + str(days) + SHOP_DAYS + ")\n"
-        else:
-            txt += SHOP_ACTIVE + "\n"
-    elif shop == "closed_perm":
-        txt += SHOP_CLOSED_PERM + "\n"
-    
-    # اگه در انتظار تأیید
-    if expert.get("status", "approved") == "pending":
-        txt += "\n⏳ در انتظار تأیید مدیر\n"
-    
-    # امتیاز
-    txt += "\n" + LBL_RATING + "{:.1f}/5".format(calc_overall_rating(expert))
-    reviews = count_reviews(expert)
-    if reviews > 0:
-        txt += " (" + str(reviews) + " نظر)"
-    
-    # تعداد معرفی
-    txt += "\n" + LBL_REFERRAL + str(expert.get("referral_count", 0)) + "\n\n"
-    
-    # امتیاز هر معیار
-    txt += "📊 امتیاز شما در هر معیار:\n"
-    for cr in CRITERIA:
-        avg = calc_criteria_rating(expert, cr["key"])
-        stars = round(avg)
-        txt += cr["label"] + " " + ("⭐" * stars) + " ({:.1f})\n".format(avg)
-    
-    # مراحل نظرسنجی
-    txt += "\n📊 مراحل نظرسنجی:\n"
-    for st in [0, 1, 2]:
-        avg, cnt = calc_stage_stats(expert, st)
-        name = ["اولیه", "یک‌ماه", "شش‌ماه"][st]
-        if avg is None:
-            txt += name + ": هنوز نیست\n"
-        else:
-            txt += name + ": {:.1f} ({} نظر)\n".format(avg, cnt)
-    
-    send_message(chat_id, txt, kb_main())
-    
-    # نمایش کد اختصاصی
-    show_my_link(chat_id, user_id)
-    
-    # دکمه وضعیت مغازه
-    shop_kb = {"keyboard": [[{"text": BTN_SHOP_STATUS}]], "resize_keyboard": True}
-    send_message(chat_id, "برای تغییر وضعیت مغازه:", shop_kb)
-
-
-# ==================== نمایش لینک اشتراک‌گذاری ====================
-def show_my_link(chat_id, user_id):
-    """نمایش کد اختصاصی و لینک اشتراک‌گذاری"""
-    expert = find_expert_by_id(user_id)
-    if not expert:
-        return
-    
-    code = expert.get("expert_code", "")
-    if not code:
-        code = gen_expert_code(expert.get("name", "expert"))
-        experts = load_experts()
-        for e in experts:
-            if e.get("user_id") == user_id:
-                e["expert_code"] = code
-                break
-        save_experts(experts)
-    
-    link = "https://ble.ir/" + BOT_USERNAME + "?start=" + code if BOT_USERNAME else "https://ble.ir/yourbot?start=" + code
-    
-    txt = LBL_CODE + code + "\n\n" + LBL_LINK + link + SHARE_HINT
-    send_message(chat_id, txt, kb_share_link(link))
-
-
-# ==================== محاسبات ====================
-def calc_overall_rating(expert):
-    """میانگین امتیاز کل"""
+# ==================== محاسبه امتیاز ====================
+def calc_avg_rating(expert):
+    """میانگین امتیاز کلی"""
     total = 0
     count = 0
     for cr in CRITERIA:
@@ -178,3 +77,121 @@ def calc_stage_stats(expert, stage):
     if count == 0:
         return None, 0
     return total / count, count
+
+
+def rating_breakdown(expert):
+    """نمایش تفصیلی امتیازها"""
+    lines = []
+    for cr in CRITERIA:
+        avg = calc_criteria_rating(expert, cr["key"])
+        stars = round(avg)
+        lines.append(cr["label"] + " " + ("⭐" * stars) + " ({:.1f})".format(avg))
+    return "\n".join(lines)
+
+
+# ==================== وضعیت مغازه ====================
+def get_shop_label(expert):
+    """گرفتن وضعیت مغازه به صورت متن"""
+    if not expert.get("active", True):
+        return "❌ غیرفعال"
+    st = expert.get("shop_status", "active")
+    if st == "active":
+        return SHOP_ACTIVE
+    if st == "closed_perm":
+        return SHOP_CLOSED_PERM
+    if st == "closed_temp":
+        if expert.get("closed_until", 0) > time.time():
+            days = max(1, int((expert["closed_until"] - time.time()) / 86400) + 1)
+            return SHOP_CLOSED_TEMP + " (" + SHOP_COUNTDOWN + str(days) + SHOP_DAYS + ")"
+        return SHOP_ACTIVE
+    return SHOP_ACTIVE
+
+
+# ==================== نمایش پروفایل ====================
+def show_profile(chat_id, user_id):
+    """نمایش پروفایل تعمیرکار"""
+    expert = find_expert_by_id(user_id)
+    if not expert:
+        send_message(chat_id, NO_PROFILE, kb_main())
+        return
+    
+    txt = MY_PROFILE
+    txt += LBL_NAME + " " + expert.get("name", "?") + "\n"
+    txt += LBL_ROLE + " " + expert.get("category", "?") + "\n"
+    txt += LBL_SUBSPEC + " " + "، ".join(expert.get("sub_specialties", [])) + "\n"
+    txt += LBL_AREA + " " + expert.get("area", "?") + "\n"
+    txt += LBL_PHONE + " " + expert.get("phone", "?") + "\n"
+    txt += LBL_ONSITE + " " + (YES if expert.get("works_on_site") else NO) + "\n"
+    txt += "⏱ سرعت پاسخگویی: " + RESPONSE_TIMES[int(expert.get("response_speed", 0))] + "\n"
+    txt += "🔧 زمان تعمیر: " + REPAIR_TIMES[int(expert.get("repair_time", 0))] + "\n"
+    txt += SHOP_STATUS_TITLE + get_shop_label(expert) + "\n\n"
+    
+    if expert.get("status", "approved") == "pending":
+        txt += "⏳ در انتظار تأیید مدیر\n\n"
+    
+    txt += "⭐ {:.1f}/5".format(calc_avg_rating(expert))
+    rv = count_reviews(expert)
+    if rv > 0:
+        txt += " (" + str(rv) + " نظر)"
+    txt += "\n" + LBL_REFERRAL + str(expert.get("referral_count", 0)) + "\n\n"
+    txt += rating_breakdown(expert) + "\n\n"
+    txt += "📊 مراحل نظرسنجی:\n"
+    for st in [0, 1, 2]:
+        a, c = calc_stage_stats(expert, st)
+        nm = ["اولیه", "یک‌ماه", "شش‌ماه"][st]
+        if a is None:
+            txt += "• " + nm + ": هنوز نیست\n"
+        else:
+            txt += "• " + nm + ": {:.1f} ({} نظر)\n".format(a, c)
+    
+    send_message(chat_id, txt, kb_main())
+    
+    # نمایش کد اختصاصی و لینک
+    _show_expert_link(chat_id, user_id, expert)
+    
+    # هشدار لوکیشن
+    if not expert.get("lat") or not expert.get("lng"):
+        warn_kb = {
+            "inline_keyboard": [[
+                {"text": "📍 ثبت موقعیت مکانی", "callback_data": "profile:set_location"}
+            ]]
+        }
+        send_message(
+            chat_id,
+            "⚠️ توجه: شما موقعیت مکانی ثبت نکردید.\n"
+            "با ثبت موقعیت، مشتریان راحت‌تر شما را پیدا می‌کنند.",
+            warn_kb
+        )
+    
+    # منوی پروفایل (کیف پول + وضعیت مغازه)
+    profile_kb = {"keyboard": [
+        [{"text": BTN_WALLET}],
+        [{"text": BTN_SHOP_STATUS}],
+        [{"text": BTN_BACK}]
+    ], "resize_keyboard": True}
+    send_message(chat_id, "👤 منوی پروفایل:", profile_kb)
+
+
+def _show_expert_link(chat_id, user_id, expert):
+    """نمایش کد اختصاصی و لینک اشتراک"""
+    code = expert.get("expert_code", "")
+    if not code:
+        code = gen_expert_code(expert.get("name", "expert"))
+        experts = load_experts()
+        for x in experts:
+            if x.get("user_id") == user_id:
+                x["expert_code"] = code
+                break
+        save_experts(experts)
+    
+    link = _build_expert_link(code)
+    txt = LBL_CODE + code + "\n\n" + LBL_LINK + link + SHARE_HINT
+    send_message(chat_id, txt, kb_share_link(link))
+
+
+def _build_expert_link(code):
+    """ساخت لینک اختصاصی تعمیرکار"""
+    bot_user = config.BOT_USERNAME
+    if bot_user:
+        return "https://ble.ir/" + bot_user + "?start=" + code
+    return "https://ble.ir/yourbot?start=" + code
