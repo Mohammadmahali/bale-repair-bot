@@ -6,6 +6,7 @@ BOT_USERNAME = ""
 
 # ==================== نام فایل‌های دیتابیس ====================
 DB_FILE = "experts.json"
+SQLITE_FILE = "bot.db"
 JOBS_FILE = "jobs.json"
 CONFIG_FILE = "bot_config.json"
 USERS_FILE = "users.json"
