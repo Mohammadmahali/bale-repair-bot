@@ -24,6 +24,7 @@ from db import (
     add_message, get_chat_messages, reset_unread,
     get_expert_chats, get_customer_chats,
     find_expert_by_id, share_phone_in_chat, hide_chat,
+    load_jobs,
 )
 
 
@@ -35,18 +36,15 @@ def start_chat_with_expert(chat_id, customer_id, expert_id, sessions):
         send_message(chat_id, CHAT_NOT_FOUND, kb_main())
         return False
     
-    # ساخت یا گرفتن چت
     chat = get_chat_between(expert_id, customer_id)
     if not chat:
         chat_id_db = create_chat(expert_id, customer_id)
         chat = get_chat(chat_id_db)
-        # پیام خوش‌آمدگویی
         welcome_msg = CHAT_NEW_WELCOME.format(name=expert.get("name", "تعمیرکار"))
         send_message(chat_id, welcome_msg, kb_chat_expert())
     else:
         send_message(chat_id, CHAT_STARTED_WITH_EXPERT.format(name=expert.get("name", "تعمیرکار")), kb_chat_expert())
     
-    # ذخیره chat در sessions
     sessions[customer_id] = {
         "step": "chat_active",
         "data": {"chat_id": chat["id"], "role": "customer"}
@@ -93,7 +91,7 @@ def handle_chat_message(chat_id, user_id, text, sessions):
         send_message(chat_id, CHAT_NOT_FOUND, kb_main())
         return True
     
-    if text == BTN_BACK:
+    if text == BTN_BACK or text == BTN_CHAT_BACK:
         sessions.pop(user_id, None)
         if role == "expert":
             show_my_chats(chat_id, user_id)
@@ -112,11 +110,9 @@ def handle_chat_message(chat_id, user_id, text, sessions):
         return True
     
     # پیام متنی
-    if text and text not in [BTN_CHAT_BACK, BTN_CHAT_HIDE, BTN_CHAT_SHARE_PHONE]:
+    if text and text not in [BTN_CHAT_BACK, BTN_CHAT_HIDE, BTN_CHAT_SHARE_PHONE, BTN_BACK]:
         add_message(chat_id_db, user_id, role, text, 0, 0)
         send_message(chat_id, CHAT_MESSAGE_SENT, kb_chat_expert() if role == "customer" else kb_chat_customer())
-        
-        # اطلاع به طرف مقابل
         notify_other_side(chat_id_db, user_id, role, text, is_photo=False)
         return True
     
@@ -140,8 +136,6 @@ def handle_chat_photo(chat_id, user_id, message_id, sessions):
     
     add_message(chat_id_db, user_id, role, "[عکس]", message_id, 1)
     send_message(chat_id, CHAT_PHOTO_SENT, kb_chat_expert() if role == "customer" else kb_chat_customer())
-    
-    # اطلاع به طرف مقابل
     notify_other_side(chat_id_db, user_id, role, "[عکس]", is_photo=True, photo_message_id=message_id)
     return True
 
@@ -160,12 +154,9 @@ def notify_other_side(chat_id_db, sender_id, sender_role, content, is_photo=Fals
         target_id = chat["customer_id"]
         sender_name = "تعمیرکار"
     
-    # چک کن کاربر در حال چت با این chat هست یا نه
-    # اگه نه، نوتیف بفرست
     msg = CHAT_NEW_MESSAGE.format(name=sender_name, message=content)
     
     if is_photo and photo_message_id:
-        # forward عکس
         try:
             api_call("forwardMessage", {
                 "chat_id": target_id,
@@ -175,7 +166,12 @@ def notify_other_side(chat_id_db, sender_id, sender_role, content, is_photo=Fals
         except:
             pass
     
-    send_message(target_id, msg, kb_chat_expert() if sender_role == "expert" else kb_chat_customer())
+    # دکمه باز کردن چت
+    kb = {"inline_keyboard": [[
+        {"text": "💬 باز کردن چت", "callback_data": "chatopen:" + str(chat_id_db)}
+    ]]}
+    
+    send_message(target_id, msg, kb)
 
 
 # ==================== لیست چت‌های تعمیرکار ====================
@@ -192,21 +188,10 @@ def show_my_chats(chat_id, expert_id, filter_type="all"):
         customer = c.get("customer_id", "?")
         unread = c.get("expert_unread", 0)
         last = c.get("last_message_at", 0)
-        
-        # ایموجی وضعیت
-        if unread > 0:
-            emoji = "🔴"
-        else:
-            emoji = "💬"
-        
-        # زمان آخرین پیام
+        emoji = "🔴" if unread > 0 else "💬"
         time_ago = _format_time_ago(last)
-        
-        txt += "{} مشتری #{} - {} پیام نخونده ({})\n".format(
-            emoji, customer, unread, time_ago
-        )
+        txt += "{} مشتری #{} - {} پیام نخونده ({})\n".format(emoji, customer, unread, time_ago)
     
-    # کیبورد با دکمه‌های چت
     kb = {"inline_keyboard": []}
     for c in chats[:10]:
         unread = c.get("expert_unread", 0)
@@ -227,17 +212,13 @@ def open_chat(chat_id, user_id, chat_id_db, sessions):
     if not chat:
         return False
     
-    # چک دسترسی
     if chat["expert_id"] != user_id and chat["customer_id"] != user_id:
         send_message(chat_id, CHAT_NO_PERMISSION)
         return False
     
     role = "expert" if chat["expert_id"] == user_id else "customer"
-    
-    # صفر کردن unread
     reset_unread(chat_id_db, role)
     
-    # نمایش پیام‌های اخیر
     messages = get_chat_messages(chat_id_db, 10)
     txt = "💬 چت فعال\n\n"
     if messages:
@@ -265,7 +246,7 @@ def open_chat(chat_id, user_id, chat_id_db, sessions):
 
 # ==================== اشتراک شماره ====================
 def do_share_phone(chat_id, user_id, sessions):
-    """اشتراک شماره تلفن"""
+    """اشتراک شماره تلفن بین دو طرف"""
     if user_id not in sessions:
         return False
     session = sessions[user_id]
@@ -273,25 +254,51 @@ def do_share_phone(chat_id, user_id, sessions):
         return False
     
     chat_id_db = session["data"].get("chat_id")
+    role = session["data"].get("role")
     chat = get_chat(chat_id_db)
     if not chat:
         return False
     
-    if chat.get("phone_shared"):
-        expert = find_expert_by_id(chat["expert_id"])
-        send_message(chat_id, CHAT_PHONE_ALREADY_SHARED.format(
-            expert_phone=expert.get("phone", "?") if expert else "?",
-            customer_phone="?"
-        ))
+    # گرفتن شماره تعمیرکار
+    expert = find_expert_by_id(chat["expert_id"])
+    expert_phone = expert.get("phone", "?") if expert else "?"
+    
+    # گرفتن شماره مشتری از job info
+    customer_phone = "?"
+    jobs = load_jobs()
+    for j in reversed(jobs):
+        if j.get("customer_id") == chat["customer_id"] and j.get("expert_id") == chat["expert_id"]:
+            info = j.get("info", {})
+            if info.get("phone"):
+                customer_phone = info["phone"]
+                break
+    
+    # اگه شماره مشتری موجود نبود
+    if customer_phone == "?":
+        send_message(chat_id, 
+            "❌ متأسفانه شماره مشتری در سیستم ثبت نشده.\n"
+            "لطفاً از مشتری بخواهید شماره‌اش را در چت ارسال کند.")
         return True
     
+    # ثبت اشتراک
     share_phone_in_chat(chat_id_db)
-    expert = find_expert_by_id(chat["expert_id"])
     
-    send_message(chat_id, CHAT_PHONE_SHARED.format(
-        expert_phone=expert.get("phone", "?") if expert else "?",
-        customer_phone="?"
-    ))
+    # پیام برای هر دو طرف
+    msg = CHAT_PHONE_SHARED.format(
+        expert_phone=expert_phone,
+        customer_phone=customer_phone
+    )
+    
+    # ارسال به خود کاربر
+    send_message(chat_id, msg)
+    
+    # ارسال به طرف مقابل
+    if role == "expert":
+        other_id = chat["customer_id"]
+    else:
+        other_id = chat["expert_id"]
+    
+    send_message(other_id, msg)
     return True
 
 
