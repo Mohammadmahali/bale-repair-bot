@@ -12,7 +12,8 @@ from texts import (
     ADM_ADD_OP, ADM_RM_OP, ADM_APPROVE, ADM_REJECT, ADM_BACK,
     ADM_TOGGLE_ON, ADM_TOGGLE_OFF, ADM_PREMIUM_ON, ADM_PREMIUM_OFF, ADM_DELETE,
     BTN_NAV_NESHAN, BTN_NAV_GOOGLE,
-)
+    BTN_CHAT_EXPERT, BTN_CHAT_CUSTOMER, BTN_MY_CHATS,
+    BTN_CHAT_BACK, BTN_CHAT_HIDE, BTN_CHAT_SHARE_PHONE, BTN_CHAT_REFRESH,)
 
 
 # ==================== کیبورد اصلی ====================
@@ -204,4 +205,60 @@ def kb_city_multiple(cities):
 def kb_profile_location():
     return {"inline_keyboard": [[
         {"text": BTN_SET_LOCATION, "callback_data": "profile:set_location"}
+    ]]}
+
+
+# ==================== کیبورد چت ====================
+def kb_chat_expert():
+    """کیبورد چت برای مشتری"""
+    return {"keyboard": [
+        [{"text": BTN_CHAT_BACK}]
+    ], "resize_keyboard": True}
+
+
+def kb_chat_customer():
+    """کیبورد چت برای تعمیرکار"""
+    return {"keyboard": [
+        [{"text": BTN_CHAT_SHARE_PHONE}],
+        [{"text": BTN_CHAT_HIDE}],
+        [{"text": BTN_CHAT_BACK}]
+    ], "resize_keyboard": True}
+
+
+def kb_chat_menu():
+    """منوی چت‌های تعمیرکار"""
+    return {"keyboard": [
+        [{"text": BTN_CHAT_REFRESH}],
+        [{"text": BTN_BACK}]
+    ], "resize_keyboard": True}
+
+
+def kb_chat_list():
+    """کیبورد فیلتر چت‌ها (inline)"""
+    return {"inline_keyboard": [
+        [{"text": "📋 همه", "callback_data": "chatfilter:all"}],
+        [{"text": "🔴 فقط نخونده‌ها", "callback_data": "chatfilter:unread"}],
+        [{"text": "📅 امروز", "callback_data": "chatfilter:today"}]
+    ]}
+
+
+def kb_chat_item(chat_id, has_unread=False):
+    """دکمه‌ی یه چت توی لیست"""
+    emoji = "🔴" if has_unread else "💬"
+    return {"text": emoji + " " + str(chat_id), "callback_data": "chatopen:" + str(chat_id)}
+
+
+def kb_chat_share_phone_confirm():
+    """تأیید اشتراک شماره"""
+    return {"inline_keyboard": [[
+        {"text": "✅ بله", "callback_data": "chatphone:yes"},
+        {"text": "❌ خیر", "callback_data": "chatphone:no"}
+    ]]}
+
+
+def kb_chat_hide_confirm():
+    """تأیید مخفی کردن چت"""
+    return {"inline_keyboard": [[
+        {"text": "✅ بله، مخفی کن", "callback_data": "chathide:yes"},
+        {"text": "❌ انصراف", "callback_data": "chathide:no"}
     ]]}
