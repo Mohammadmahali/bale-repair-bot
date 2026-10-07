@@ -327,3 +327,73 @@ BTN_SET_LOCATION = "📍 ثبت موقعیت مکانی"
 CUSTOMER_PROFILE_TITLE = "📜 فعالیت‌های ۶ ماه اخیر شما\n\n"
 CUSTOMER_NO_ACTIVITY = "هنوز درخواستی ثبت نکردی."
 DATA_RETENTION_NOTE = "ℹ️ اطلاعات بعد از ۶ ماه به دلایل قانونی حذف می‌شود."
+
+
+# ==================== چت ====================
+BTN_CHAT_EXPERT = "💬 چت با تعمیرکار"
+BTN_CHAT_CUSTOMER = "💬 چت با مشتری"
+BTN_MY_CHATS = "💬 چت‌های من"
+BTN_CHAT_BACK = "🔙 بازگشت به لیست چت‌ها"
+BTN_CHAT_HIDE = "🗑 مخفی کردن چت"
+BTN_CHAT_SHARE_PHONE = "📞 اشتراک شماره من"
+BTN_CHAT_REFRESH = "🔄 بروزرسانی"
+
+CHAT_TITLE = "💬 چت‌های شما\n\n"
+CHAT_NO_CHATS = "هنوز چتی نداری."
+CHAT_NEW_WELCOME = """💬 چت شما با {name} باز شد.
+
+می‌تونید مشکل را توضیح بدید یا عکس بفرستید.
+پیام‌هایتان به صورت ناشناس ارسال می‌شه."""
+
+CHAT_STARTED_WITH_EXPERT = """💬 چت با {name} آغاز شد.
+
+پیام خود را بنویسید یا عکس بفرستید:"""
+
+CHAT_STARTED_WITH_CUSTOMER = """💬 چت با مشتری آغاز شد.
+
+می‌تونید در مورد مشکل دستگاه با مشتری صحبت کنید.
+شماره‌های شما تا زمانی که هر دو تأیید نکنید، نمایش داده نمی‌شه."""
+
+CHAT_MESSAGE_SENT = "✅ پیام شما ارسال شد."
+CHAT_PHOTO_SENT = "✅ عکس شما ارسال شد."
+
+CHAT_NEW_MESSAGE = "🔔 پیام جدید در چت از {name}:\n\n{message}"
+
+CHAT_SHARE_PHONE_REQUEST = """📞 آیا می‌خواهید شماره تماستان با طرف مقابل به اشتراک گذاشته شود؟
+
+اگه تأیید کنید، هر دو طرف شماره‌های همدیگه رو می‌بینند."""
+
+CHAT_PHONE_SHARED = """✅ شماره‌ها به اشتراک گذاشته شد.
+
+📞 شماره تعمیرکار: {expert_phone}
+📞 شماره مشتری: {customer_phone}"""
+
+CHAT_PHONE_ALREADY_SHARED = """✅ شماره‌ها قبلاً به اشتراک گذاشته شده:
+
+📞 تعمیرکار: {expert_phone}
+📞 مشتری: {customer_phone}"""
+
+CHAT_HIDDEN_OK = "✅ چت مخفی شد."
+CHAT_HIDDEN_INFO = "ℹ️ این چت مخفی شده. برای دیدن مجدد، با پشتیبانی تماس بگیرید."
+
+CHAT_NOT_FOUND = "❌ چت پیدا نشد."
+CHAT_NO_PERMISSION = "❌ دسترسی ندارید."
+
+CHAT_LIST_HEADER = "💬 چت‌های شما ({count}):\n\n"
+CHAT_LIST_ITEM = "{emoji} {name} - {unread} پیام نخونده\n"
+CHAT_LIST_ITEM_READ = "{emoji} {name}\n"
+
+CHAT_FILTER_ALL = "📋 همه"
+CHAT_FILTER_UNREAD = "🔴 فقط نخونده‌ها"
+CHAT_FILTER_TODAY = "📅 امروز"
+
+CHAT_MENU_TITLE = "💬 چت‌های من\n\nیک گزینه را انتخاب کنید:"
+
+CHAT_ACTIVE = "🟢 فعال"
+CHAT_EXPIRED = "🔴 منقضی"
+
+CHAT_EXPIRED_MSG = """⏰ این چت منقضی شده.
+
+مدت اعتبار چت‌ها ۶ ماه است.
+
+برای چت جدید، از پروفایل یا درخواست جدید استفاده کنید."""
