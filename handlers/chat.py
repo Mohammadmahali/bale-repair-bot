@@ -30,7 +30,6 @@ from db import (
 
 # ==================== چت مشتری با تعمیرکار ====================
 def start_chat_with_expert(chat_id, customer_id, expert_id, sessions):
-    """شروع چت مشتری با تعمیرکار"""
     expert = find_expert_by_id(expert_id)
     if not expert:
         send_message(chat_id, CHAT_NOT_FOUND, kb_main())
@@ -47,14 +46,13 @@ def start_chat_with_expert(chat_id, customer_id, expert_id, sessions):
     
     sessions[customer_id] = {
         "step": "chat_active",
-        "data": {"chat_id": chat["id"], "role": "customer"}
+        "data": {"chat_id": chat["id"], "role": "customer", "bale_chat_id": chat_id}
     }
     return True
 
 
 # ==================== چت تعمیرکار با مشتری ====================
 def start_chat_with_customer(chat_id, expert_id, customer_id, sessions):
-    """شروع چت تعمیرکار با مشتری"""
     expert = find_expert_by_id(expert_id)
     if not expert:
         send_message(chat_id, CHAT_NOT_FOUND, kb_main())
@@ -69,14 +67,13 @@ def start_chat_with_customer(chat_id, expert_id, customer_id, sessions):
     
     sessions[expert_id] = {
         "step": "chat_active",
-        "data": {"chat_id": chat["id"], "role": "expert"}
+        "data": {"chat_id": chat["id"], "role": "expert", "bale_chat_id": chat_id}
     }
     return True
 
 
 # ==================== دریافت پیام چت ====================
 def handle_chat_message(chat_id, user_id, text, sessions):
-    """هندل پیام در چت"""
     if user_id not in sessions:
         return False
     session = sessions[user_id]
@@ -113,7 +110,8 @@ def handle_chat_message(chat_id, user_id, text, sessions):
     if text and text not in [BTN_CHAT_BACK, BTN_CHAT_HIDE, BTN_CHAT_SHARE_PHONE, BTN_BACK]:
         add_message(chat_id_db, user_id, role, text, 0, 0)
         send_message(chat_id, CHAT_MESSAGE_SENT, kb_chat_expert() if role == "customer" else kb_chat_customer())
-        notify_other_side(chat_id_db, user_id, role, text, is_photo=False)
+        # chat_id (بله) رو پاس می‌دیم که ازش forward بشه
+        notify_other_side(chat_id_db, user_id, role, text, sender_bale_chat_id=chat_id)
         return True
     
     return False
@@ -121,7 +119,6 @@ def handle_chat_message(chat_id, user_id, text, sessions):
 
 # ==================== دریافت عکس چت ====================
 def handle_chat_photo(chat_id, user_id, message_id, sessions):
-    """هندل عکس در چت"""
     if user_id not in sessions:
         return False
     session = sessions[user_id]
@@ -136,12 +133,19 @@ def handle_chat_photo(chat_id, user_id, message_id, sessions):
     
     add_message(chat_id_db, user_id, role, "[عکس]", message_id, 1)
     send_message(chat_id, CHAT_PHOTO_SENT, kb_chat_expert() if role == "customer" else kb_chat_customer())
-    notify_other_side(chat_id_db, user_id, role, "[عکس]", is_photo=True, photo_message_id=message_id)
+    # chat_id (بله) رو پاس می‌دیم که ازش forward بشه
+    notify_other_side(
+        chat_id_db, user_id, role, "[عکس]",
+        is_photo=True,
+        photo_message_id=message_id,
+        sender_bale_chat_id=chat_id
+    )
     return True
 
 
 # ==================== اطلاع به طرف مقابل ====================
-def notify_other_side(chat_id_db, sender_id, sender_role, content, is_photo=False, photo_message_id=None):
+def notify_other_side(chat_id_db, sender_id, sender_role, content,
+                     is_photo=False, photo_message_id=None, sender_bale_chat_id=None):
     """اطلاع به طرف مقابل از پیام جدید"""
     chat = get_chat(chat_id_db)
     if not chat:
@@ -156,27 +160,28 @@ def notify_other_side(chat_id_db, sender_id, sender_role, content, is_photo=Fals
     
     msg = CHAT_NEW_MESSAGE.format(name=sender_name, message=content)
     
-    if is_photo and photo_message_id:
-        try:
-            api_call("forwardMessage", {
-                "chat_id": target_id,
-                "from_chat_id": target_id,
-                "message_id": photo_message_id
-            })
-        except:
-            pass
-    
     # دکمه باز کردن چت
     kb = {"inline_keyboard": [[
         {"text": "💬 باز کردن چت", "callback_data": "chatopen:" + str(chat_id_db)}
     ]]}
     
+    # اول پیام با دکمه
     send_message(target_id, msg, kb)
+    
+    # بعد عکس (اگه بود) با from_chat_id درست
+    if is_photo and photo_message_id and sender_bale_chat_id:
+        try:
+            api_call("forwardMessage", {
+                "chat_id": target_id,
+                "from_chat_id": sender_bale_chat_id,
+                "message_id": photo_message_id
+            })
+        except Exception as ex:
+            print("Forward photo error:", str(ex)[:100])
 
 
 # ==================== لیست چت‌های تعمیرکار ====================
 def show_my_chats(chat_id, expert_id, filter_type="all"):
-    """نمایش لیست چت‌های تعمیرکار"""
     chats = get_expert_chats(expert_id, filter_type)
     
     if not chats:
@@ -207,7 +212,6 @@ def show_my_chats(chat_id, expert_id, filter_type="all"):
 
 # ==================== باز کردن چت ====================
 def open_chat(chat_id, user_id, chat_id_db, sessions):
-    """باز کردن یه چت خاص"""
     chat = get_chat(chat_id_db)
     if not chat:
         return False
@@ -236,7 +240,7 @@ def open_chat(chat_id, user_id, chat_id_db, sessions):
     
     sessions[user_id] = {
         "step": "chat_active",
-        "data": {"chat_id": chat_id_db, "role": role}
+        "data": {"chat_id": chat_id_db, "role": role, "bale_chat_id": chat_id}
     }
     
     kb = kb_chat_expert() if role == "customer" else kb_chat_customer()
@@ -259,12 +263,12 @@ def do_share_phone(chat_id, user_id, sessions):
     if not chat:
         return False
     
-    # گرفتن شماره تعمیرکار
+    # شماره تعمیرکار
     expert = find_expert_by_id(chat["expert_id"])
     expert_phone = expert.get("phone", "?") if expert else "?"
     
-    # گرفتن شماره مشتری از job info
-    customer_phone = "?"
+    # شماره مشتری
+    customer_phone = None
     jobs = load_jobs()
     for j in reversed(jobs):
         if j.get("customer_id") == chat["customer_id"] and j.get("expert_id") == chat["expert_id"]:
@@ -273,38 +277,35 @@ def do_share_phone(chat_id, user_id, sessions):
                 customer_phone = info["phone"]
                 break
     
-    # اگه شماره مشتری موجود نبود
-    if customer_phone == "?":
-        send_message(chat_id, 
-            "❌ متأسفانه شماره مشتری در سیستم ثبت نشده.\n"
-            "لطفاً از مشتری بخواهید شماره‌اش را در چت ارسال کند.")
-        return True
-    
     # ثبت اشتراک
     share_phone_in_chat(chat_id_db)
     
-    # پیام برای هر دو طرف
-    msg = CHAT_PHONE_SHARED.format(
-        expert_phone=expert_phone,
-        customer_phone=customer_phone
-    )
-    
-    # ارسال به خود کاربر
-    send_message(chat_id, msg)
-    
-    # ارسال به طرف مقابل
+    # طرف مقابل
     if role == "expert":
         other_id = chat["customer_id"]
     else:
         other_id = chat["expert_id"]
     
-    send_message(other_id, msg)
+    # ساخت پیام
+    if customer_phone:
+        # هر دو شماره موجود
+        msg = CHAT_PHONE_SHARED.format(
+            expert_phone=expert_phone,
+            customer_phone=customer_phone
+        )
+        send_message(chat_id, msg)
+        send_message(other_id, msg)
+    else:
+        # فقط شماره تعمیرکار
+        msg_expert = "✅ شماره شما با مشتری به اشتراک گذاشته شد.\n\n📞 شماره شما: " + expert_phone
+        msg_customer = "📞 شماره تعمیرکار:\n\n" + expert_phone + "\n\n⚠️ شماره شما در سیستم ثبت نشده بود. لطفاً شماره‌تان را در چت ارسال کنید."
+        send_message(chat_id, msg_expert)
+        send_message(other_id, msg_customer)
     return True
 
 
 # ==================== مخفی کردن چت ====================
 def do_hide_chat(chat_id, user_id, sessions):
-    """مخفی کردن چت"""
     if user_id not in sessions:
         return False
     session = sessions[user_id]
@@ -323,7 +324,6 @@ def do_hide_chat(chat_id, user_id, sessions):
 
 # ==================== کمکی ====================
 def _format_time_ago(timestamp):
-    """نمایش زمان نسبی"""
     if not timestamp:
         return "جدید"
     diff = int(time.time()) - timestamp
