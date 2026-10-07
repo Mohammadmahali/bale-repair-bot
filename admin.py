@@ -10,8 +10,8 @@ from db import (
 )
 from api import send_message
 from keyboards import (
-    kb_admin, kb_back, kb_main,
-    kb_approve_reject, kb_expert_detail, kb_operators,
+    kb_admin, kb_approve_reject, kb_expert_detail,
+    kb_operators, kb_back,
 )
 from texts import (
     ADM_TITLE, ADM_STATS, ADM_PENDING, ADM_NEW_EXPERT,
@@ -20,11 +20,13 @@ from texts import (
     ADM_DELETED, EXP_APPROVED_NOTIFY, EXP_REJECTED_NOTIFY,
     ADM_SET_PASS_FIRST, ADM_ENTER_NEW_PASS, ADM_ENTER_AGAIN,
     ADM_PASS_MISMATCH, ADM_PASS_SHORT, ADM_PASS_SET_OK,
-    ADM_BACK,
     LBL_NAME, LBL_PHONE, LBL_ROLE, LBL_SUBSPEC, LBL_AREA,
     LBL_RATING, LBL_REFERRAL,
     WALLET_APPROVED_NOTIFY, WALLET_REJECTED_NOTIFY,
+    SHOP_STATUS_TITLE,
+    ADM_BACK,
 )
+from utils import format_toman
 
 
 # ==================== بررسی دسترسی ====================
@@ -56,6 +58,7 @@ def notify_admins_new_expert(expert):
 
 # ==================== محاسبه امتیاز ====================
 def _calc_avg_rating(expert):
+    """محاسبه امتیاز کل تعمیرکار"""
     from texts import CRITERIA
     total = 0
     count = 0
@@ -89,7 +92,7 @@ def show_stats(chat_id):
     send_message(chat_id, txt, kb_admin())
 
 
-# ==================== لیست در انتظار تأیید ====================
+# ==================== لیست در انتظار ====================
 def show_pending_list(chat_id):
     pending = [e for e in load_experts() if e.get("status") == "pending"]
     if not pending:
@@ -117,7 +120,10 @@ def show_pending_detail(chat_id, user_id):
     txt += LBL_ROLE + " " + e.get("category", "?") + "\n"
     txt += LBL_SUBSPEC + " " + "، ".join(e.get("sub_specialties", [])) + "\n"
     txt += LBL_AREA + " " + e.get("area", "?") + "\n"
-    txt += "🏠 حضور در محل: " + ("بله" if e.get("works_on_site") else "خیر") + "\n"
+    if e.get("works_on_site"):
+        txt += "🏠 حضور در محل: بله\n"
+    else:
+        txt += "🏠 حضور در محل: خیر\n"
     
     kb = {
         "inline_keyboard": [
@@ -162,7 +168,6 @@ def show_experts_list(chat_id):
     send_message(chat_id, "👥 متخصصین:", kb)
 
 
-# ==================== جزئیات تعمیرکار ====================
 def show_expert_detail(chat_id, expert_id):
     e = find_expert_by_id(expert_id)
     if not e:
@@ -177,7 +182,6 @@ def show_expert_detail(chat_id, expert_id):
     txt += LBL_AREA + " " + e.get("area", "?") + "\n"
     txt += LBL_RATING + "{:.1f}/5".format(_calc_avg_rating(e)) + "\n"
     txt += LBL_REFERRAL + str(e.get("referral_count", 0)) + "\n"
-    txt += "💰 موجودی کیف پول: " + "{:,}".format(e.get("wallet_balance", 0)) + " تومان\n"
     txt += "🆔 " + e.get("expert_code", "?") + "\n"
     txt += "📱 " + str(e["user_id"]) + "\n"
     
@@ -248,8 +252,8 @@ def show_revenue(chat_id):
     
     txt = "💰 درآمد:\n\n"
     txt += "📈 کل معرفی‌ها: " + str(total_refs) + "\n"
-    txt += "💵 درآمد تخمینی: " + "{:,}".format(estimated) + " تومان\n\n"
-    txt += "ℹ️ محاسبه بر اساس " + "{:,}".format(COMMISSION_DEFAULT) + " برای هر معرفی"
+    txt += "💵 درآمد تخمینی: " + format_toman(estimated) + "\n\n"
+    txt += "ℹ️ محاسبه بر اساس " + format_toman(COMMISSION_DEFAULT) + " برای هر معرفی"
     send_message(chat_id, txt, kb_admin())
 
 
@@ -311,13 +315,6 @@ def ask_set_password_first(chat_id):
     send_message(chat_id, ADM_SET_PASS_FIRST, kb_back())
 
 
-def handle_password_set(chat_id, user_id, new_pass):
-    if len(new_pass) < 4:
-        return False, ADM_PASS_SHORT
-    set_user_password(user_id, new_pass)
-    return True, ADM_PASS_SET_OK
-
-
 # ==================== تأیید/رد شارژ کیف پول ====================
 def approve_wallet_txn(txn_id, chat_id, admin_id):
     """تأیید شارژ کیف پول"""
@@ -356,8 +353,3 @@ def reject_wallet_txn(txn_id, chat_id, admin_id):
         )
     except Exception as ex:
         print("Wallet notify error:", str(ex)[:100])
-
-
-# ==================== گزارشات (placeholder) ====================
-def show_pending_reports(chat_id):
-    send_message(chat_id, "بخش گزارش‌ها فعال نشده.", kb_admin())
