@@ -262,3 +262,11 @@ def kb_chat_hide_confirm():
         {"text": "✅ بله، مخفی کن", "callback_data": "chathide:yes"},
         {"text": "❌ انصراف", "callback_data": "chathide:no"}
     ]]}
+
+
+# ==================== کیبورد ارسال لوکیشن از پروفایل ====================
+def kb_profile_location_send():
+    return {"keyboard": [
+        [{"text": "📍 ارسال موقعیت من", "request_location": True}],
+        [{"text": BTN_BACK}]
+    ], "resize_keyboard": True, "one_time_keyboard": True}
