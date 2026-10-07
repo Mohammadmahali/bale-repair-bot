@@ -11,8 +11,9 @@ from texts import (
     SHOP_COUNTDOWN, SHOP_DAYS,
     RESPONSE_TIMES, REPAIR_TIMES,
     BTN_SHOP_STATUS, BTN_WALLET, BTN_BACK,
+    LOCATION_WARNING,
 )
-from keyboards import kb_main, kb_share_link
+from keyboards import kb_main, kb_share_link, kb_profile, kb_profile_location
 from api import send_message
 from db import find_expert_by_id, is_shop_open
 from utils import gen_expert_code
@@ -40,7 +41,7 @@ def calc_avg_rating(expert):
 
 
 def calc_criteria_rating(expert, criteria_key):
-    """میانگین امتیاز یه معیار خاص"""
+    """میانگین امتیاز یه معیار"""
     total = 0
     count = 0
     for s in ["0", "1", "2"]:
@@ -65,7 +66,7 @@ def count_reviews(expert):
 
 
 def calc_stage_stats(expert, stage):
-    """امتیاز یه مرحله خاص"""
+    """امتیاز یه مرحله"""
     total = 0
     count = 0
     stage_data = expert.get("ratings_by_stage", {}).get(str(stage), {})
@@ -91,7 +92,7 @@ def rating_breakdown(expert):
 
 # ==================== وضعیت مغازه ====================
 def get_shop_label(expert):
-    """گرفتن وضعیت مغازه به صورت متن"""
+    """گرفتن وضعیت مغازه"""
     if not expert.get("active", True):
         return "❌ غیرفعال"
     st = expert.get("shop_status", "active")
@@ -146,30 +147,19 @@ def show_profile(chat_id, user_id):
     
     send_message(chat_id, txt, kb_main())
     
-    # نمایش کد اختصاصی و لینک
+    # لینک اشتراک
     _show_expert_link(chat_id, user_id, expert)
     
     # هشدار لوکیشن
     if not expert.get("lat") or not expert.get("lng"):
-        warn_kb = {
-            "inline_keyboard": [[
-                {"text": "📍 ثبت موقعیت مکانی", "callback_data": "profile:set_location"}
-            ]]
-        }
         send_message(
             chat_id,
-            "⚠️ توجه: شما موقعیت مکانی ثبت نکردید.\n"
-            "با ثبت موقعیت، مشتریان راحت‌تر شما را پیدا می‌کنند.",
-            warn_kb
+            LOCATION_WARNING,
+            kb_profile_location()
         )
     
-    # منوی پروفایل (کیف پول + وضعیت مغازه)
-    profile_kb = {"keyboard": [
-        [{"text": BTN_WALLET}],
-        [{"text": BTN_SHOP_STATUS}],
-        [{"text": BTN_BACK}]
-    ], "resize_keyboard": True}
-    send_message(chat_id, "👤 منوی پروفایل:", profile_kb)
+    # منوی پروفایل
+    send_message(chat_id, "👤 منوی پروفایل:", kb_profile())
 
 
 def _show_expert_link(chat_id, user_id, expert):
@@ -190,7 +180,7 @@ def _show_expert_link(chat_id, user_id, expert):
 
 
 def _build_expert_link(code):
-    """ساخت لینک اختصاصی تعمیرکار"""
+    """ساخت لینک اختصاصی"""
     bot_user = config.BOT_USERNAME
     if bot_user:
         return "https://ble.ir/" + bot_user + "?start=" + code
