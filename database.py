@@ -89,7 +89,40 @@ def init_db():
                 reviewed_by INTEGER,
                 reject_reason TEXT DEFAULT ''
             )
-        """)      
+        """) 
+
+                # جدول چت‌ها
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS chats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                expert_id INTEGER,
+                customer_id INTEGER,
+                job_code TEXT DEFAULT '',
+                status TEXT DEFAULT 'active',
+                created_at INTEGER,
+                last_message_at INTEGER,
+                expert_hidden INTEGER DEFAULT 0,
+                customer_hidden INTEGER DEFAULT 0,
+                phone_shared INTEGER DEFAULT 0,
+                expert_unread INTEGER DEFAULT 0,
+                customer_unread INTEGER DEFAULT 0
+            )
+        """)
+        
+        # جدول پیام‌ها
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                sender_id INTEGER,
+                sender_type TEXT,
+                content TEXT,
+                message_id INTEGER,
+                is_photo INTEGER DEFAULT 0,
+                created_at INTEGER
+            )
+        """)
+        
         # جدول کاربران (برای اتصال بله-تلگرام)
         c.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -484,6 +517,186 @@ def get_expert_wallet_history(expert_id, limit=10):
             ORDER BY created_at DESC
             LIMIT ?
         """, (expert_id, limit))
+        rows = c.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+
+# ==================== چت ====================
+def create_chat(expert_id, customer_id, job_code=""):
+    """ساخت چت جدید"""
+    import time as _time
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        # چک کن قبلاً چت بین این دو نفر هست
+        c.execute("""
+            SELECT id FROM chats
+            WHERE expert_id = ? AND customer_id = ?
+            ORDER BY created_at DESC LIMIT 1
+        """, (expert_id, customer_id))
+        row = c.fetchone()
+        if row:
+            chat_id = row["id"]
+            # بازش کن اگه بسته بود
+            c.execute("UPDATE chats SET status = 'active' WHERE id = ?", (chat_id,))
+            conn.commit()
+            conn.close()
+            return chat_id
+        
+        now = int(_time.time())
+        c.execute("""
+            INSERT INTO chats
+            (expert_id, customer_id, job_code, status, created_at, last_message_at)
+            VALUES (?, ?, ?, 'active', ?, ?)
+        """, (expert_id, customer_id, job_code, now, now))
+        chat_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        return chat_id
+
+
+def get_chat(chat_id):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM chats WHERE id = ?", (chat_id,))
+        row = c.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+
+def get_chat_between(expert_id, customer_id):
+    """گرفتن چت بین یه تعمیرکار و مشتری"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""
+            SELECT * FROM chats
+            WHERE expert_id = ? AND customer_id = ? AND status = 'active'
+            ORDER BY created_at DESC LIMIT 1
+        """, (expert_id, customer_id))
+        row = c.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+
+def update_chat(chat_id, field, value):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("UPDATE chats SET {} = ? WHERE id = ?".format(field), (value, chat_id))
+        conn.commit()
+        conn.close()
+
+
+def add_message(chat_id, sender_id, sender_type, content, message_id=0, is_photo=0):
+    """اضافه کردن پیام"""
+    import time as _time
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        now = int(_time.time())
+        c.execute("""
+            INSERT INTO messages
+            (chat_id, sender_id, sender_type, content, message_id, is_photo, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (chat_id, sender_id, sender_type, content, message_id, is_photo, now))
+        msg_id = c.lastrowid
+        # آپدیت chat
+        c.execute("UPDATE chats SET last_message_at = ? WHERE id = ?", (now, chat_id))
+        # زیاد کردن unread
+        if sender_type == "expert":
+            c.execute("UPDATE chats SET customer_unread = customer_unread + 1 WHERE id = ?", (chat_id,))
+        else:
+            c.execute("UPDATE chats SET expert_unread = expert_unread + 1 WHERE id = ?", (chat_id,))
+        conn.commit()
+        conn.close()
+        return msg_id
+
+
+def get_chat_messages(chat_id, limit=20):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""
+            SELECT * FROM messages
+            WHERE chat_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (chat_id, limit))
+        rows = c.fetchall()
+        conn.close()
+        return [dict(r) for r in reversed(rows)]
+
+
+def reset_unread(chat_id, user_type):
+    """صفر کردن unread"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        if user_type == "expert":
+            c.execute("UPDATE chats SET expert_unread = 0 WHERE id = ?", (chat_id,))
+        else:
+            c.execute("UPDATE chats SET customer_unread = 0 WHERE id = ?", (chat_id,))
+        conn.commit()
+        conn.close()
+
+
+def get_expert_chats(expert_id, filter_type="all"):
+    """گرفتن چت‌های یه تعمیرکار"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        
+        if filter_type == "unread":
+            c.execute("""
+                SELECT * FROM chats
+                WHERE expert_id = ? AND expert_hidden = 0
+                AND status = 'active' AND expert_unread > 0
+                ORDER BY last_message_at DESC
+            """, (expert_id,))
+        elif filter_type == "today":
+            import time as _time
+            today_start = int(_time.time()) - 86400
+            c.execute("""
+                SELECT * FROM chats
+                WHERE expert_id = ? AND expert_hidden = 0
+                AND status = 'active' AND last_message_at >= ?
+                ORDER BY last_message_at DESC
+            """, (expert_id, today_start))
+        else:
+            c.execute("""
+                SELECT * FROM chats
+                WHERE expert_id = ? AND expert_hidden = 0
+                AND status = 'active'
+                ORDER BY last_message_at DESC
+            """, (expert_id,))
+        rows = c.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+
+def get_customer_chats(customer_id, filter_type="all"):
+    """گرفتن چت‌های یه مشتری"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        
+        if filter_type == "unread":
+            c.execute("""
+                SELECT * FROM chats
+                WHERE customer_id = ? AND customer_hidden = 0
+                AND status = 'active' AND customer_unread > 0
+                ORDER BY last_message_at DESC
+            """, (customer_id,))
+        else:
+            c.execute("""
+                SELECT * FROM chats
+                WHERE customer_id = ? AND customer_hidden = 0
+                AND status = 'active'
+                ORDER BY last_message_at DESC
+            """, (customer_id,))
         rows = c.fetchall()
         conn.close()
         return [dict(r) for r in rows]
