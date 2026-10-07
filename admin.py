@@ -10,8 +10,8 @@ from db import (
 )
 from api import send_message
 from keyboards import (
-    kb_admin, kb_approve_reject, kb_expert_detail,
-    kb_operators, kb_back,
+    kb_admin, kb_back, kb_main,
+    kb_approve_reject, kb_expert_detail, kb_operators,
 )
 from texts import (
     ADM_TITLE, ADM_STATS, ADM_PENDING, ADM_NEW_EXPERT,
@@ -20,11 +20,11 @@ from texts import (
     ADM_DELETED, EXP_APPROVED_NOTIFY, EXP_REJECTED_NOTIFY,
     ADM_SET_PASS_FIRST, ADM_ENTER_NEW_PASS, ADM_ENTER_AGAIN,
     ADM_PASS_MISMATCH, ADM_PASS_SHORT, ADM_PASS_SET_OK,
+    ADM_BACK,
     LBL_NAME, LBL_PHONE, LBL_ROLE, LBL_SUBSPEC, LBL_AREA,
     LBL_RATING, LBL_REFERRAL,
-    ADM_BACK,
+    WALLET_APPROVED_NOTIFY, WALLET_REJECTED_NOTIFY,
 )
-from utils import format_toman
 
 
 # ==================== بررسی دسترسی ====================
@@ -54,16 +54,24 @@ def notify_admins_new_expert(expert):
         send_message(op, msg, kb)
 
 
-def notify_admins_report(report):
-    """اطلاع به مدیران از گزارش جدید"""
-    msg = "🚨 گزارش جدید!\n\n"
-    msg += "نوع: " + report.get("target_type", "?") + "\n"
-    msg += "دلیل: " + report.get("reason", "?") + "\n"
-    msg += "توضیحات: " + report.get("description", "?") + "\n"
-    msg += "شناسه گزارش: " + str(report.get("id"))
-    send_message(SUPER_ADMIN, msg)
-    for op in get_operators():
-        send_message(op, msg)
+# ==================== محاسبه امتیاز ====================
+def _calc_avg_rating(expert):
+    from texts import CRITERIA
+    total = 0
+    count = 0
+    for cr in CRITERIA:
+        rt = 0
+        rc = 0
+        for s in ["0", "1", "2"]:
+            r = expert.get("ratings_by_stage", {}).get(s, {}).get(cr["key"], {})
+            rt += r.get("sum", 0)
+            rc += r.get("count", 0)
+        if rc > 0:
+            total += rt / rc
+            count += 1
+    if count == 0:
+        return 5.0
+    return total / count
 
 
 # ==================== آمار ====================
@@ -77,8 +85,7 @@ def show_stats(chat_id):
     txt += "⭐ ویژه: " + str(stats["premium_experts"]) + "\n"
     txt += "📈 کل معرفی‌ها: " + str(stats["total_referrals"]) + "\n"
     txt += "📋 کل پروژه‌ها: " + str(stats["total_jobs"]) + "\n"
-    txt += "👤 مشتریان یکتا: " + str(stats["unique_customers"]) + "\n"
-    txt += "🚨 گزارش‌های در انتظار: " + str(stats["pending_reports"])
+    txt += "👤 مشتریان یکتا: " + str(stats["unique_customers"])
     send_message(chat_id, txt, kb_admin())
 
 
@@ -110,10 +117,7 @@ def show_pending_detail(chat_id, user_id):
     txt += LBL_ROLE + " " + e.get("category", "?") + "\n"
     txt += LBL_SUBSPEC + " " + "، ".join(e.get("sub_specialties", [])) + "\n"
     txt += LBL_AREA + " " + e.get("area", "?") + "\n"
-    if e.get("works_on_site"):
-        txt += "🏠 حضور در محل: بله\n"
-    else:
-        txt += "🏠 حضور در محل: خیر\n"
+    txt += "🏠 حضور در محل: " + ("بله" if e.get("works_on_site") else "خیر") + "\n"
     
     kb = {
         "inline_keyboard": [
@@ -158,21 +162,6 @@ def show_experts_list(chat_id):
     send_message(chat_id, "👥 متخصصین:", kb)
 
 
-def _calc_avg_rating(expert):
-    """محاسبه امتیاز کل تعمیرکار"""
-    total = 0
-    count = 0
-    ratings = expert.get("ratings_by_stage", {})
-    for stage in ["0", "1", "2"]:
-        for key, val in ratings.get(stage, {}).items():
-            if isinstance(val, dict) and val.get("count", 0) > 0:
-                total += val["sum"]
-                count += val["count"]
-    if count == 0:
-        return 5.0
-    return total / count
-
-
 # ==================== جزئیات تعمیرکار ====================
 def show_expert_detail(chat_id, expert_id):
     e = find_expert_by_id(expert_id)
@@ -188,16 +177,15 @@ def show_expert_detail(chat_id, expert_id):
     txt += LBL_AREA + " " + e.get("area", "?") + "\n"
     txt += LBL_RATING + "{:.1f}/5".format(_calc_avg_rating(e)) + "\n"
     txt += LBL_REFERRAL + str(e.get("referral_count", 0)) + "\n"
+    txt += "💰 موجودی کیف پول: " + "{:,}".format(e.get("wallet_balance", 0)) + " تومان\n"
     txt += "🆔 " + e.get("expert_code", "?") + "\n"
     txt += "📱 " + str(e["user_id"]) + "\n"
     
-    # وضعیت
     status = "✅ فعال" if e.get("active", True) else "❌ غیرفعال"
     txt += "⚙️ " + status + "\n"
     if e.get("is_premium"):
         txt += "⭐ اشتراک ویژه\n"
     
-    # وضعیت مغازه
     shop = e.get("shop_status", "active")
     if shop == "active":
         txt += "🏪 مغازه فعال\n"
@@ -260,8 +248,8 @@ def show_revenue(chat_id):
     
     txt = "💰 درآمد:\n\n"
     txt += "📈 کل معرفی‌ها: " + str(total_refs) + "\n"
-    txt += "💵 درآمد تخمینی: " + format_toman(estimated) + "\n\n"
-    txt += "ℹ️ محاسبه بر اساس " + format_toman(COMMISSION_DEFAULT) + " برای هر معرفی"
+    txt += "💵 درآمد تخمینی: " + "{:,}".format(estimated) + " تومان\n\n"
+    txt += "ℹ️ محاسبه بر اساس " + "{:,}".format(COMMISSION_DEFAULT) + " برای هر معرفی"
     send_message(chat_id, txt, kb_admin())
 
 
@@ -324,53 +312,22 @@ def ask_set_password_first(chat_id):
 
 
 def handle_password_set(chat_id, user_id, new_pass):
-    """ثبت رمز جدید"""
     if len(new_pass) < 4:
         return False, ADM_PASS_SHORT
     set_user_password(user_id, new_pass)
     return True, ADM_PASS_SET_OK
 
 
-# ==================== گزارشات ====================
-def show_pending_reports(chat_id):
-    from db import load_reports
-    reports = [r for r in load_reports() if r.get("status") == "pending"]
-    if not reports:
-        send_message(chat_id, "هیچ گزارش در انتظاری نیست.", kb_admin())
-        return
-    
-    for r in reports[:5]:
-        txt = "🚨 گزارش #" + str(r["id"]) + "\n\n"
-        txt += "نوع: " + r.get("target_type", "?") + "\n"
-        txt += "دلیل: " + r.get("reason", "?") + "\n"
-        if r.get("description"):
-            txt += "توضیحات: " + r["description"] + "\n"
-        txt += "تاریخ: " + time.strftime("%Y/%m/%d", time.localtime(r.get("created_at", 0)))
-        
-        kb = {
-            "inline_keyboard": [[
-                {"text": "✅ تأیید", "callback_data": "adm:rpt_ok:" + str(r["id"])},
-                {"text": "❌ رد", "callback_data": "adm:rpt_no:" + str(r["id"])}
-            ]]
-        }
-        send_message(chat_id, txt, kb)
-
-
 # ==================== تأیید/رد شارژ کیف پول ====================
 def approve_wallet_txn(txn_id, chat_id, admin_id):
     """تأیید شارژ کیف پول"""
-    from texts import WALLET_APPROVED_NOTIFY
-    from api import send_message
-    
     txn = approve_wallet_charge(txn_id, admin_id)
     if not txn:
         send_message(chat_id, "❌ تراکنش پیدا نشد یا قبلاً بررسی شده.")
         return
     
-    # پیام به مدیر
     send_message(chat_id, "✅ تأیید شد. کیف پول تعمیرکار شارژ شد.")
     
-    # پیام به تعمیرکار
     try:
         balance = get_wallet_balance(txn["expert_id"])
         send_message(
@@ -386,9 +343,6 @@ def approve_wallet_txn(txn_id, chat_id, admin_id):
 
 def reject_wallet_txn(txn_id, chat_id, admin_id):
     """رد شارژ کیف پول"""
-    from texts import WALLET_REJECTED_NOTIFY
-    from api import send_message
-    
     txn = reject_wallet_charge(txn_id, admin_id, "رسید نامعتبر")
     if not txn:
         send_message(chat_id, "❌ تراکنش پیدا نشد یا قبلاً بررسی شده.")
@@ -402,3 +356,8 @@ def reject_wallet_txn(txn_id, chat_id, admin_id):
         )
     except Exception as ex:
         print("Wallet notify error:", str(ex)[:100])
+
+
+# ==================== گزارشات (placeholder) ====================
+def show_pending_reports(chat_id):
+    send_message(chat_id, "بخش گزارش‌ها فعال نشده.", kb_admin())
