@@ -172,3 +172,16 @@ def _build_expert_link(code):
     if bot_user:
         return "https://ble.ir/" + bot_user + "?start=" + code
     return "https://ble.ir/yourbot?start=" + code
+
+
+# ==================== ذخیره لوکیشن از پروفایل ====================
+def handle_profile_location(chat_id, user_id, location):
+    """ذخیره لوکیشن از پروفایل"""
+    experts = load_experts()
+    for e in experts:
+        if e.get("user_id") == user_id:
+            e["lat"] = location.get("latitude")
+            e["lng"] = location.get("longitude")
+            break
+    save_experts(experts)
+    return True
