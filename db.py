@@ -388,3 +388,56 @@ def get_expert_priority_penalty(expert):
     if balance < tariff:
         return -30
     return 0
+
+
+# ==================== چت ====================
+def create_chat(expert_id, customer_id, job_code=""):
+    return db_sql.create_chat(expert_id, customer_id, job_code)
+
+
+def get_chat(chat_id):
+    return db_sql.get_chat(chat_id)
+
+
+def get_chat_between(expert_id, customer_id):
+    return db_sql.get_chat_between(expert_id, customer_id)
+
+
+def update_chat(chat_id, field, value):
+    return db_sql.update_chat(chat_id, field, value)
+
+
+def add_message(chat_id, sender_id, sender_type, content, message_id=0, is_photo=0):
+    return db_sql.add_message(chat_id, sender_id, sender_type, content, message_id, is_photo)
+
+
+def get_chat_messages(chat_id, limit=20):
+    return db_sql.get_chat_messages(chat_id, limit)
+
+
+def reset_unread(chat_id, user_type):
+    return db_sql.reset_unread(chat_id, user_type)
+
+
+def get_expert_chats(expert_id, filter_type="all"):
+    return db_sql.get_expert_chats(expert_id, filter_type)
+
+
+def get_customer_chats(customer_id, filter_type="all"):
+    return db_sql.get_customer_chats(customer_id, filter_type)
+
+
+def share_phone_in_chat(chat_id):
+    """اشتراک شماره بین دو طرف"""
+    import time
+    db_sql.update_chat(chat_id, "phone_shared", 1)
+    return True
+
+
+def hide_chat(chat_id, user_type):
+    """مخفی کردن چت برای یه طرف"""
+    if user_type == "expert":
+        db_sql.update_chat(chat_id, "expert_hidden", 1)
+    else:
+        db_sql.update_chat(chat_id, "customer_hidden", 1)
+    return True
