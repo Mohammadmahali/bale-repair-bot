@@ -8,7 +8,7 @@ from texts import (
     WALLET_CHARGE_INTRO, WALLET_INVALID_AMOUNT,
     WALLET_ASK_RECEIPT, WALLET_RECEIPT_SENT,
     WALLET_ADMIN_NEW,
-    BTN_BACK,
+    BTN_BACK, BTN_CHARGE_WALLET,
 )
 from keyboards import kb_back, kb_wallet, kb_main, kb_wallet_admin
 from api import send_message, api_call
@@ -45,6 +45,7 @@ def show_wallet(chat_id, user_id):
         else:
             txt += "\n" + WALLET_STATUS_CHARGED
     
+    # تاریخچه
     history = get_expert_wallet_history(user_id, 5)
     if history:
         txt += WALLET_HISTORY
@@ -54,10 +55,11 @@ def show_wallet(chat_id, user_id):
                 "approved": "✅ تأیید",
                 "rejected": "❌ رد",
             }
-            sign = "+" if h.get("type") == "charge" else "-"
-            amount = "{:,}".format(h.get("amount", 0))
-            status = status_map.get(h.get("status", ""), h.get("status", ""))
-            txt += "• {} {} تومان - {}\n".format(sign, amount, status)
+            txt += "• {} {} تومان - {}\n".format(
+                "+" if h.get("type") == "charge" else "-",
+                "{:,}".format(h.get("amount", 0)),
+                status_map.get(h.get("status", ""), h.get("status", ""))
+            )
     
     send_message(chat_id, txt, kb_wallet())
 
@@ -109,6 +111,7 @@ def handle_receipt(chat_id, user_id, message_id, sessions):
         send_message(chat_id, "خطا در مبلغ. دوباره تلاش کنید.", kb_main())
         return False
     
+    # ساخت درخواست
     txn_id = create_wallet_charge_request(user_id, amount, message_id)
     if not txn_id:
         send_message(chat_id, "خطا در ثبت. دوباره تلاش کنید.", kb_main())
@@ -118,6 +121,7 @@ def handle_receipt(chat_id, user_id, message_id, sessions):
     send_message(chat_id, WALLET_RECEIPT_SENT, kb_main())
     sessions.pop(user_id, None)
     
+    # ارسال به مدیر
     notify_admin_receipt(user_id, amount, message_id, txn_id, chat_id)
     return True
 
@@ -128,7 +132,7 @@ def notify_admin_receipt(user_id, amount, message_id, txn_id, expert_chat_id):
     if not expert:
         return
     
-    # forward عکس رسید به مدیر
+    # اول forward عکس رسید
     try:
         api_call("forwardMessage", {
             "chat_id": SUPER_ADMIN,
@@ -138,7 +142,7 @@ def notify_admin_receipt(user_id, amount, message_id, txn_id, expert_chat_id):
     except Exception as ex:
         print("Forward error:", str(ex)[:100])
     
-    # پیام اطلاعات + دکمه تأیید
+    # بعد پیام اطلاعات + دکمه
     txt = WALLET_ADMIN_NEW.format(
         name=expert.get("name", "?"),
         user_id=user_id,
@@ -159,5 +163,5 @@ def notify_admin_receipt(user_id, amount, message_id, txn_id, expert_chat_id):
                 "message_id": message_id
             })
             send_message(op, txt, kb)
-        except Exception as ex:
-            print("Op notify error:", str(ex)[:100])
+        except:
+            pass
