@@ -22,7 +22,6 @@ from db import load_experts, save_experts
 
 # ==================== محاسبه امتیاز ====================
 def calc_avg_rating(expert):
-    """میانگین امتیاز کلی"""
     total = 0
     count = 0
     for cr in CRITERIA:
@@ -41,7 +40,6 @@ def calc_avg_rating(expert):
 
 
 def calc_criteria_rating(expert, criteria_key):
-    """میانگین امتیاز یه معیار"""
     total = 0
     count = 0
     for s in ["0", "1", "2"]:
@@ -54,7 +52,6 @@ def calc_criteria_rating(expert, criteria_key):
 
 
 def count_reviews(expert):
-    """تعداد کل نظرات"""
     max_count = 0
     for cr in CRITERIA:
         cnt = 0
@@ -66,7 +63,6 @@ def count_reviews(expert):
 
 
 def calc_stage_stats(expert, stage):
-    """امتیاز یه مرحله"""
     total = 0
     count = 0
     stage_data = expert.get("ratings_by_stage", {}).get(str(stage), {})
@@ -81,7 +77,6 @@ def calc_stage_stats(expert, stage):
 
 
 def rating_breakdown(expert):
-    """نمایش تفصیلی امتیازها"""
     lines = []
     for cr in CRITERIA:
         avg = calc_criteria_rating(expert, cr["key"])
@@ -92,7 +87,6 @@ def rating_breakdown(expert):
 
 # ==================== وضعیت مغازه ====================
 def get_shop_label(expert):
-    """گرفتن وضعیت مغازه"""
     if not expert.get("active", True):
         return "❌ غیرفعال"
     st = expert.get("shop_status", "active")
@@ -110,7 +104,6 @@ def get_shop_label(expert):
 
 # ==================== نمایش پروفایل ====================
 def show_profile(chat_id, user_id):
-    """نمایش پروفایل تعمیرکار"""
     expert = find_expert_by_id(user_id)
     if not expert:
         send_message(chat_id, NO_PROFILE, kb_main())
@@ -147,23 +140,18 @@ def show_profile(chat_id, user_id):
     
     send_message(chat_id, txt, kb_main())
     
-    # لینک اشتراک
+    # نمایش کد اختصاصی و لینک
     _show_expert_link(chat_id, user_id, expert)
     
     # هشدار لوکیشن
     if not expert.get("lat") or not expert.get("lng"):
-        send_message(
-            chat_id,
-            LOCATION_WARNING,
-            kb_profile_location()
-        )
+        send_message(chat_id, LOCATION_WARNING, kb_profile_location())
     
     # منوی پروفایل
     send_message(chat_id, "👤 منوی پروفایل:", kb_profile())
 
 
 def _show_expert_link(chat_id, user_id, expert):
-    """نمایش کد اختصاصی و لینک اشتراک"""
     code = expert.get("expert_code", "")
     if not code:
         code = gen_expert_code(expert.get("name", "expert"))
@@ -180,7 +168,6 @@ def _show_expert_link(chat_id, user_id, expert):
 
 
 def _build_expert_link(code):
-    """ساخت لینک اختصاصی"""
     bot_user = config.BOT_USERNAME
     if bot_user:
         return "https://ble.ir/" + bot_user + "?start=" + code
