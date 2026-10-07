@@ -5,6 +5,7 @@ import threading
 import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
+
 # ==================== Health Server ====================
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -27,6 +28,7 @@ def start_health_server():
         print("Health server error:", str(ex)[:100])
 
 
+# راه‌اندازی health server
 threading.Thread(target=start_health_server, daemon=True).start()
 
 
@@ -36,17 +38,21 @@ from api import (
     send_message, answer_callback, get_me,
     get_updates, delete_webhook, clear_old_updates,
 )
-from keyboards import kb_main, kb_wallet, kb_profile, kb_back
+from keyboards import (
+    kb_main, kb_back,
+    kb_wallet, kb_wallet_admin,
+)
 from texts import (
     WELCOME, BTN_REGISTER, BTN_SEARCH_SIMPLE, BTN_SEARCH_ADVANCED,
     BTN_EXPERTS_LIST, BTN_MY_PROFILE, BTN_FEEDBACK, BTN_SHOP_STATUS,
-    USE_MENU, YES, NO, SHOP_ACTIVE, SHOP_CLOSED_TEMP, SHOP_CLOSED_PERM,
-    ADM_STATS, ADM_EXPERTS, ADM_PENDING, ADM_JOBS, ADM_REVENUE,
-    ADM_OPERATORS, ADM_CHANGE_PASS, ADM_EXIT,
-    BTN_WALLET, BTN_CHARGE_WALLET, BTN_BACK,
+    USE_MENU, YES, NO, SHOP_ACTIVE, SHOP_CLOSED_TEMP, SHOP_CLOSED_PERM, \
+    ADM_STATS, ADM_EXPERTS, ADM_PENDING, ADM_JOBS, ADM_REVENUE, \
+    ADM_OPERATORS, ADM_CHANGE_PASS, ADM_EXIT, \
+    BTN_WALLET, BTN_CHARGE_WALLET, BTN_BACK, \
+    PROFILE_LOCATION_SAVED
 )
 
-# ==================== Handlers ====================
+# Handlers
 from handlers.start import handle_start, handle_experts_list, handle_feedback
 from handlers.register import (
     start_registration, continue_registration,
@@ -71,20 +77,17 @@ from handlers.shop_status import (
     set_permanent_close, set_shop_active, check_shop_reactivations,
 )
 from handlers.feedback import handle_feedback as do_feedback
-from handlers.admin_handlers import (
-    handle_admin_command, continue_admin, handle_admin_callback,
-    is_admin, is_authed_admin,
-)
 
-# ==================== Admin ====================
+# Admin
 from admin import (
     show_stats, show_pending_list, show_pending_detail,
     show_experts_list, show_expert_detail, show_jobs, show_revenue,
     show_operators, ask_change_password, ask_add_operator,
     approve_wallet_txn, reject_wallet_txn,
+    is_admin, is_super_admin,
 )
 
-# ==================== DB ====================
+# DB
 from db import (
     load_experts, save_experts, find_expert_by_id,
     get_pending_job,
@@ -109,8 +112,8 @@ def handle_message(msg):
     # ===== عکس (رسید کیف پول) =====
     if "photo" in msg:
         photos = msg.get("photo", [])
-        if photos:
-            if user_id in sessions and sessions[user_id].get("step") == "wallet_receipt":
+        if photos and user_id in sessions:
+            if sessions[user_id].get("step") == "wallet_receipt":
                 message_id = msg.get("message_id")
                 handle_receipt(chat_id, user_id, message_id, sessions)
                 return
@@ -118,23 +121,8 @@ def handle_message(msg):
     
     # ===== لوکیشن =====
     if location:
-        # لوکیشن از پروفایل
-        if user_id in sessions and sessions[user_id].get("step") == "profile_location":
-            experts = load_experts()
-            for e in experts:
-                if e.get("user_id") == user_id:
-                    e["lat"] = location.get("latitude")
-                    e["lng"] = location.get("longitude")
-                    break
-            save_experts(experts)
-            sessions.pop(user_id, None)
-            send_message(chat_id, "✅ موقعیت مکانی ثبت شد.", kb_main())
-            return
-        
-        # لوکیشن در ثبت‌نام
         if reg_location(chat_id, user_id, location, sessions):
             return
-        # لوکیشن در جستجو
         if search_location(chat_id, user_id, location, sessions):
             return
         return
@@ -146,10 +134,11 @@ def handle_message(msg):
     
     # ===== /admin =====
     if text == "/admin":
+        from handlers.admin_handlers import handle_admin_command
         handle_admin_command(chat_id, user_id, sessions, admin_sessions)
         return
     
-    # ===== پنل ادمین =====
+    # ===== اگه توی پنل ادمین هست =====
     if is_authed_admin(user_id, admin_sessions):
         if text == ADM_EXIT:
             admin_sessions.discard(user_id)
@@ -171,7 +160,7 @@ def handle_message(msg):
         if text == ADM_CHANGE_PASS:
             ask_change_password(chat_id); return
     
-    # ===== State Machine =====
+    # ===== State machine =====
     if user_id in sessions:
         step = sessions[user_id].get("step", "")
         
@@ -187,6 +176,7 @@ def handle_message(msg):
         
         # ادمین
         if step.startswith("adm_"):
+            from handlers.admin_handlers import continue_admin
             if continue_admin(chat_id, user_id, text, sessions, admin_sessions):
                 return
         
@@ -195,7 +185,7 @@ def handle_message(msg):
             if continue_shop_close(chat_id, user_id, text, sessions):
                 return
         
-        # شارژ کیف پول - مبلغ
+        # کیف پول - مبلغ
         if step == "wallet_amount":
             if text == BTN_BACK:
                 sessions.pop(user_id, None)
@@ -204,13 +194,26 @@ def handle_message(msg):
             if handle_amount(chat_id, user_id, text, sessions):
                 return
         
-        # شارژ کیف پول - منتظر عکس
+        # کیف پول - منتظر عکس
         if step == "wallet_receipt":
             if text == BTN_BACK:
                 sessions.pop(user_id, None)
                 send_message(chat_id, "لغو شد.", kb_main())
                 return
             send_message(chat_id, "لطفاً عکس رسید را ارسال کنید.", kb_back())
+            return
+        
+        # لوکیشن از پروفایل
+        if step == "profile_location" and location:
+            experts = load_experts()
+            for e in experts:
+                if e.get("user_id") == user_id:
+                    e["lat"] = location.get("latitude")
+                    e["lng"] = location.get("longitude")
+                    break
+            save_experts(experts)
+            sessions.pop(user_id, None)
+            send_message(chat_id, PROFILE_LOCATION_SAVED, kb_main())
             return
     
     # ===== منوی اصلی =====
@@ -251,7 +254,13 @@ def handle_message(msg):
     if text == SHOP_CLOSED_PERM:
         set_permanent_close(chat_id, user_id); return
     
+    # ===== پیام نامشخص =====
     send_message(chat_id, USE_MENU, kb_main())
+
+
+# ==================== بررسی دسترسی ادمین ====================
+def is_authed_admin(user_id, admin_sessions):
+    return user_id in admin_sessions and is_admin(user_id)
 
 
 # ==================== هندل Callback ====================
@@ -263,13 +272,15 @@ def handle_callback(cb):
     
     # ===== callback ادمین =====
     if data.startswith("adm:"):
-        if handle_admin_callback(chat_id, user_id, data, admin_sessions):
-            answer_callback(cb_id)
-            return
+        if is_authed_admin(user_id, admin_sessions):
+            from handlers.admin_handlers import handle_admin_callback
+            if handle_admin_callback(chat_id, user_id, data, admin_sessions):
+                answer_callback(cb_id)
+                return
         answer_callback(cb_id, "دسترسی ندارید")
         return
     
-    # ===== callback تأیید/رد شارژ کیف پول =====
+    # ===== callback تأیید شارژ کیف پول =====
     if data.startswith("wadm:"):
         if not is_authed_admin(user_id, admin_sessions):
             answer_callback(cb_id, "دسترسی ندارید")
@@ -289,48 +300,7 @@ def handle_callback(cb):
         answer_callback(cb_id)
         return
     
-    # ===== callback ثبت لوکیشن از پروفایل =====
-    if data == "profile:set_location":
-        sessions[user_id] = {"step": "profile_location", "data": {}}
-        send_message(
-            chat_id,
-            "لطفاً موقعیت مکانی خود را ارسال کنید:",
-            {"keyboard": [[
-                {"text": "📍 ارسال موقعیت من", "request_location": True}
-            ], [{"text": BTN_BACK}]], "resize_keyboard": True}
-        )
-        answer_callback(cb_id)
-        return
-    
-    # ===== callback شهر (Fuzzy) - مشتری =====
-    if data.startswith("cityfuzzy:"):
-        action = data.split(":")[1]
-        if search_city_fuzzy(chat_id, user_id, action, sessions):
-            answer_callback(cb_id)
-            return
-        answer_callback(cb_id, "خطا")
-        return
-    
-    # ===== callback چند شهر =====
-    if data.startswith("citymulti:"):
-        choice = data.split(":")[1]
-        if search_city_multiple(chat_id, user_id, choice, sessions):
-            answer_callback(cb_id)
-            return
-        answer_callback(cb_id, "خطا")
-        return
-    
-    # ===== callback شهر (Fuzzy) - ثبت‌نام =====
-    if data.startswith("regfuzzy:"):
-        action = data.split(":")[1]
-        from handlers.register import handle_city_fuzzy_callback as reg_city_fuzzy
-        if reg_city_fuzzy(chat_id, user_id, action, sessions):
-            answer_callback(cb_id)
-            return
-        answer_callback(cb_id, "خطا")
-        return
-    
-    # ===== callback امتیاز ستاره =====
+    # ===== callback star (امتیاز) =====
     if data.startswith("crit:"):
         parts = data.split(":")
         if len(parts) == 3:
@@ -380,19 +350,61 @@ def handle_callback(cb):
         answer_callback(cb_id, "✅")
         return
     
+    # ===== callback لوکیشن از پروفایل =====
+    if data == "profile:set_location":
+        sessions[user_id] = {"step": "profile_location", "data": {}}
+        loc_kb = {"keyboard": [
+            [{"text": "📍 ارسال موقعیت من", "request_location": True}],
+            [{"text": BTN_BACK}]
+        ], "resize_keyboard": True}
+        send_message(chat_id, "لطفاً موقعیت مکانی خود را ارسال کنید:", loc_kb)
+        answer_callback(cb_id)
+        return
+    
+    # ===== callback Fuzzy برای مشتری =====
+    if data.startswith("cityfuzzy:"):
+        action = data.split(":")[1]
+        if search_city_fuzzy(chat_id, user_id, action, sessions):
+            answer_callback(cb_id)
+            return
+        answer_callback(cb_id, "خطا")
+        return
+    
+    if data.startswith("citymulti:"):
+        choice = data.split(":")[1]
+        if search_city_multiple(chat_id, user_id, choice, sessions):
+            answer_callback(cb_id)
+            return
+        answer_callback(cb_id, "خطا")
+        return
+    
+    # ===== callback Fuzzy برای ثبت‌نام =====
+    if data.startswith("regfuzzy:"):
+        action = data.split(":")[1]
+        from handlers.register import handle_city_fuzzy_callback as reg_fuzzy
+        if reg_fuzzy(chat_id, user_id, action, sessions):
+            answer_callback(cb_id)
+            return
+        answer_callback(cb_id, "خطا")
+        return
+    
     answer_callback(cb_id)
 
 
 # ==================== حلقه اصلی ====================
 def main():
     print("Bot is starting...")
+    print("Token:", TOKEN[:10] + "..." if len(TOKEN) > 10 else TOKEN)
     
     # راه‌اندازی SQLite
-    from database import init_db, migrate_from_json
-    init_db()
-    print("Database initialized")
-    migrate_from_json()
-    print("Migration check done")
+    try:
+        from database import init_db, migrate_from_json
+        init_db()
+        print("Database initialized")
+        migrate_from_json()
+        print("Migration check done")
+    except Exception as ex:
+        print("DB init error:", str(ex)[:100])
     
     # حذف Webhook
     try:
@@ -424,6 +436,7 @@ def main():
         try:
             now = time.time()
             
+            # هر ۶۰ ثانیه چک نظرسنجی
             if now - last_followup > 60:
                 try:
                     check_followups()
@@ -432,6 +445,7 @@ def main():
                     print("Followup error:", str(ex)[:100])
                 last_followup = now
             
+            # گرفتن پیام‌های جدید
             updates = get_updates(offset)
             fail_count = 0
             
