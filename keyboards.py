@@ -2,19 +2,20 @@
 from texts import (
     BTN_REGISTER, BTN_SEARCH_SIMPLE, BTN_SEARCH_ADVANCED,
     BTN_EXPERTS_LIST, BTN_MY_PROFILE, BTN_FEEDBACK, BTN_SHOP_STATUS,
-    BTN_BACK, CAT_ELEC, CAT_GAS, CAT_COOL, CAT_CAR,
+    BTN_BACK, BTN_HOME, CAT_ELEC, CAT_GAS, CAT_COOL, CAT_CAR,
     YES, NO, WHO_ME, WHO_SYS,
     SHOP_ACTIVE, SHOP_CLOSED_TEMP, SHOP_CLOSED_PERM,
     BTN_SHARE, BTN_COPY_LINK,
+    BTN_WALLET, BTN_CHARGE_WALLET, BTN_SET_LOCATION,
     ADM_STATS, ADM_EXPERTS, ADM_PENDING, ADM_JOBS, ADM_REVENUE,
     ADM_OPERATORS, ADM_CHANGE_PASS, ADM_EXIT,
     ADM_ADD_OP, ADM_RM_OP, ADM_APPROVE, ADM_REJECT, ADM_BACK,
     ADM_TOGGLE_ON, ADM_TOGGLE_OFF, ADM_PREMIUM_ON, ADM_PREMIUM_OFF, ADM_DELETE,
     BTN_NAV_NESHAN, BTN_NAV_GOOGLE,
-    BTN_WALLET, BTN_CHARGE_WALLET,
 )
 
 
+# ==================== کیبورد اصلی ====================
 def kb_main():
     return {"keyboard": [
         [{"text": BTN_REGISTER}],
@@ -25,6 +26,7 @@ def kb_main():
     ], "resize_keyboard": True}
 
 
+# ==================== کیبورد دسته‌بندی ====================
 def kb_categories():
     return {"keyboard": [
         [{"text": CAT_ELEC}],
@@ -35,6 +37,7 @@ def kb_categories():
     ], "resize_keyboard": True, "one_time_keyboard": True}
 
 
+# ==================== کیبورد بله/خیر ====================
 def kb_yes_no():
     return {"keyboard": [
         [{"text": YES}, {"text": NO}],
@@ -42,10 +45,12 @@ def kb_yes_no():
     ], "resize_keyboard": True, "one_time_keyboard": True}
 
 
+# ==================== کیبورد بازگشت ====================
 def kb_back():
     return {"keyboard": [[{"text": BTN_BACK}]], "resize_keyboard": True}
 
 
+# ==================== کیبورد ارسال لوکیشن ====================
 def kb_location():
     return {"keyboard": [
         [{"text": "📍 ارسال موقعیت من", "request_location": True}],
@@ -53,10 +58,12 @@ def kb_location():
     ], "resize_keyboard": True, "one_time_keyboard": True}
 
 
+# ==================== کیبورد فقط متن ====================
 def kb_text_only():
     return {"keyboard": [[{"text": BTN_BACK}]], "resize_keyboard": True}
 
 
+# ==================== کیبورد انتخاب تعمیرکار ====================
 def kb_who_picks():
     return {"keyboard": [
         [{"text": WHO_ME}],
@@ -65,6 +72,7 @@ def kb_who_picks():
     ], "resize_keyboard": True, "one_time_keyboard": True}
 
 
+# ==================== کیبورد وضعیت مغازه ====================
 def kb_shop_status():
     return {"keyboard": [
         [{"text": SHOP_ACTIVE}],
@@ -74,6 +82,24 @@ def kb_shop_status():
     ], "resize_keyboard": True, "one_time_keyboard": True}
 
 
+# ==================== کیبورد پروفایل ====================
+def kb_profile():
+    return {"keyboard": [
+        [{"text": BTN_WALLET}],
+        [{"text": BTN_SHOP_STATUS}],
+        [{"text": BTN_BACK}]
+    ], "resize_keyboard": True}
+
+
+# ==================== کیبورد کیف پول ====================
+def kb_wallet():
+    return {"keyboard": [
+        [{"text": BTN_CHARGE_WALLET}],
+        [{"text": BTN_BACK}]
+    ], "resize_keyboard": True}
+
+
+# ==================== کیبورد ادمین ====================
 def kb_admin():
     return {"keyboard": [
         [{"text": ADM_STATS}],
@@ -87,6 +113,7 @@ def kb_admin():
     ], "resize_keyboard": True}
 
 
+# ==================== کیبورد ستاره‌ها (inline) ====================
 def kb_stars(criteria_key):
     return {"inline_keyboard": [[
         {"text": "1⭐", "callback_data": "crit:" + criteria_key + ":1"},
@@ -97,6 +124,7 @@ def kb_stars(criteria_key):
     ]]}
 
 
+# ==================== کیبورد اشتراک‌گذاری لینک ====================
 def kb_share_link(url):
     return {"inline_keyboard": [
         [{"text": BTN_SHARE, "url": url}],
@@ -104,8 +132,8 @@ def kb_share_link(url):
     ]}
 
 
+# ==================== کیبورد مسیریابی ====================
 def kb_navigation(lat, lng):
-    """دکمه‌های مسیریابی - نشان (وب) + گوگل مپ"""
     neshan_web = "https://neshan.org/maps/@{},{}".format(lat, lng)
     google_url = "https://www.google.com/maps?q={},{}".format(lat, lng)
     return {"inline_keyboard": [
@@ -114,6 +142,7 @@ def kb_navigation(lat, lng):
     ]}
 
 
+# ==================== کیبورد تأیید/رد (ادمین) ====================
 def kb_approve_reject(user_id):
     return {"inline_keyboard": [[
         {"text": ADM_APPROVE, "callback_data": "adm:appr:" + str(user_id)},
@@ -121,6 +150,7 @@ def kb_approve_reject(user_id):
     ]]}
 
 
+# ==================== کیبورد جزئیات تعمیرکار (ادمین) ====================
 def kb_expert_detail(expert_id, is_active, is_premium):
     return {"inline_keyboard": [
         [{"text": ADM_TOGGLE_OFF if is_active else ADM_TOGGLE_ON,
@@ -134,6 +164,7 @@ def kb_expert_detail(expert_id, is_active, is_premium):
     ]}
 
 
+# ==================== کیبورد مدیریت اپراتورها ====================
 def kb_operators():
     return {"inline_keyboard": [
         [{"text": ADM_ADD_OP, "callback_data": "adm:addop"}],
@@ -142,22 +173,24 @@ def kb_operators():
     ]}
 
 
-def kb_rating_comment():
+# ==================== کیبورد کیف پول (ادمین) ====================
+def kb_wallet_admin(txn_id):
     return {"inline_keyboard": [[
-        {"text": "⏭ رد کردن", "callback_data": "rate:skip_comment"}
+        {"text": "✅ تأیید", "callback_data": "wadm:approve:" + str(txn_id)},
+        {"text": "❌ رد", "callback_data": "wadm:reject:" + str(txn_id)}
     ]]}
 
 
+# ==================== کیبورد تأیید شهر (Fuzzy) ====================
 def kb_city_confirm(suggested_city):
-    """کیبورد تأیید شهر (Fuzzy)"""
     return {"inline_keyboard": [[
         {"text": "✅ بله، " + suggested_city, "callback_data": "cityfuzzy:yes"},
         {"text": "❌ خیر", "callback_data": "cityfuzzy:no"}
     ]]}
 
 
+# ==================== کیبورد چند شهر مشابه ====================
 def kb_city_multiple(cities):
-    """کیبورد انتخاب از چند شهر مشابه"""
     keyboard = []
     for i, city in enumerate(cities, 1):
         keyboard.append([
@@ -167,15 +200,8 @@ def kb_city_multiple(cities):
     return {"inline_keyboard": keyboard}
 
 
-def kb_wallet():
-    return {"keyboard": [
-        [{"text": BTN_CHARGE_WALLET}],
-        [{"text": BTN_BACK}]
-    ], "resize_keyboard": True}
-
-
-def kb_wallet_admin(txn_id):
+# ==================== کیبورد لوکیشن از پروفایل ====================
+def kb_profile_location():
     return {"inline_keyboard": [[
-        {"text": "✅ تأیید", "callback_data": "wadm:approve:" + str(txn_id)},
-        {"text": "❌ رد", "callback_data": "wadm:reject:" + str(txn_id)}
+        {"text": BTN_SET_LOCATION, "callback_data": "profile:set_location"}
     ]]}
