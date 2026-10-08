@@ -441,3 +441,107 @@ def hide_chat(chat_id, user_type):
     else:
         db_sql.update_chat(chat_id, "customer_hidden", 1)
     return True
+
+
+# ==================== دسته‌بندی‌ها ====================
+DEFAULT_CATEGORIES = {
+    "🔌 لوازم برقی": [
+        "ماکروفر / مایکروویو", "توستر", "فر برقی توکار", "جاروبرقی",
+        "چای‌ساز / کتری برقی", "قهوه‌ساز", "پلوپز", "سرخ‌کن / آیرفرایر",
+        "سشوار", "اتو (بخارشو، پرس، ایستاده)", "ماشین لباسشویی",
+        "ماشین ظرفشویی", "دستگاه تصفیه آب", "آبسردکن", "تلویزیون",
+        "لامپ و پروژکتور", "انواع محافظ (یخچال، کولر، تلویزیون)",
+        "تعمیر بردهای الکترونیکی", "پنکه دستی و رومیزی", "پنکه سقفی",
+        "سایر لوازم برقی",
+    ],
+    "🔥 لوازم گازی": [
+        "اجاق گاز", "آبگرمکن دیواری", "آبگرمکن زمینی", "بخاری گازی",
+        "پکیج شوفاژ", "شومینه گازی", "سایر لوازم گازی",
+    ],
+    "❄️ سرمایشی و گرمایشی": [
+        "یخچال و فریزر", "کولر آبی", "کولر گازی (اسپلیت)",
+        "چیلر", "رادیاتور", "سایر سرمایشی",
+    ],
+    "🚗 خودرو": [
+        "جلوبندی‌ساز", "تنظیم موتور", "تعمیر ترمز", "تعمیر فرمان",
+        "برق خودرو", "باتری‌ساز", "آپاراتی (پنچرگیری)",
+        "تعویض روغن، فیلتر و سرویس", "مکانیکی (تعمیرات موتور)",
+        "گیربکس و کلاچ", "کمک‌فنر و فنر", "اگزوز", "کولر و بخاری خودرو",
+        "دیاک و عیب‌یابی", "صافکاری", "نقاشی خودرو", "سایر خدمات خودرو",
+    ],
+}
+
+
+def get_all_categories():
+    """گرفتن همه دسته‌بندی‌ها"""
+    cats = db_sql.config_get("categories", None)
+    if not cats:
+        db_sql.config_set("categories", DEFAULT_CATEGORIES)
+        return dict(DEFAULT_CATEGORIES)
+    return cats
+
+
+def get_category_subs(category):
+    """زیرتخصص‌های یه دسته"""
+    cats = get_all_categories()
+    return cats.get(category, [])
+
+
+def add_category_db(label):
+    """افزودن دسته"""
+    cats = get_all_categories()
+    if label in cats:
+        return False
+    cats[label] = []
+    db_sql.config_set("categories", cats)
+    return True
+
+
+def remove_category_db(label):
+    """حذف دسته"""
+    cats = get_all_categories()
+    if label not in cats:
+        return False
+    del cats[label]
+    db_sql.config_set("categories", cats)
+    return True
+
+
+def add_sub_db(category, sub):
+    """افزودن زیرتخصص"""
+    cats = get_all_categories()
+    if category not in cats:
+        return False
+    if sub in cats[category]:
+        return False
+    cats[category].append(sub)
+    db_sql.config_set("categories", cats)
+    return True
+
+
+def remove_sub_db(category, sub):
+    """حذف زیرتخصص"""
+    cats = get_all_categories()
+    if category not in cats:
+        return False
+    if sub not in cats[category]:
+        return False
+    cats[category].remove(sub)
+    db_sql.config_set("categories", cats)
+    return True
+
+
+def get_category_by_index(idx):
+    """گرفتن دسته با شماره"""
+    cats = list(get_all_categories().keys())
+    if 0 <= idx < len(cats):
+        return cats[idx]
+    return None
+
+
+def get_sub_by_index(cat_label, idx):
+    """گرفتن زیرتخصص با شماره"""
+    subs = get_category_subs(cat_label)
+    if 0 <= idx < len(subs):
+        return subs[idx]
+    return None
