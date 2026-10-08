@@ -8,8 +8,10 @@ from api_admin import (
     admin_delete_webhook, admin_clear_old_updates,
     admin_forward_message,
 )
-from keyboards import kb_admin, kb_back, kb_main
-from texts import (
+from keyboards import (
+    kb_admin, kb_back, kb_main,
+    kb_edit_menu, kb_categories_list, kb_tariffs_list,
+)from texts import (
     ADM_TITLE, ADM_ASK_PASS, ADM_WRONG_PASS, ADM_NOT_AUTH,
     ADM_STATS, ADM_EXPERTS, ADM_PENDING, ADM_JOBS, ADM_REVENUE,
     ADM_OPERATORS, ADM_CHANGE_PASS, ADM_EXIT,
@@ -20,6 +22,14 @@ from texts import (
     ADM_NEW_EXPERT, ADM_NO_PENDING, ADM_NO_EXPERT,
     ADM_DELETED, ADM_BACK,
     USE_MENU, INVALID_INPUT, YES, NO, BTN_BACK,
+    BTN_EDIT, BTN_EDIT_CATEGORIES, BTN_EDIT_TARIFFS,
+    BTN_EDIT_FEEDBACK, BTN_EDIT_CARD, BTN_SAVE, BTN_CANCEL,
+    EDIT_MENU_TITLE, EDIT_CATEGORIES_TITLE, EDIT_CATEGORY_ASK_NEW,
+    EDIT_CATEGORY_ADDED, EDIT_CATEGORY_EXISTS, EDIT_CATEGORY_ASK_DELETE,
+    EDIT_CATEGORY_DELETED, EDIT_TARIFFS_TITLE, EDIT_TARIFF_ASK,
+    EDIT_TARIFF_UPDATED, EDIT_TARIFF_INVALID, EDIT_FEEDBACK_ASK,
+    EDIT_FEEDBACK_UPDATED, EDIT_CARD_ASK, EDIT_CARD_OWNER_ASK,
+    EDIT_CARD_UPDATED, EDIT_SAVED, EDIT_CANCELED,
 )
 from db import (
     get_operators, add_operator, remove_operator,
@@ -27,7 +37,9 @@ from db import (
     find_expert_by_id, delete_expert, update_expert_field,
     get_stats, load_experts, load_jobs,
     get_wallet_balance, approve_wallet_charge, reject_wallet_charge,
+    load_admin_config, save_admin_config,
 )
+import config
 
 
 # ==================== State های ربات ادمین ====================
@@ -102,7 +114,9 @@ def handle_admin_message(msg):
         if text == ADM_OPERATORS:
             show_operators(chat_id); return
         if text == ADM_CHANGE_PASS:
-            ask_change_password(chat_id, user_id); return
+            ask_change_password(chat_id, user_id); return 
+        if text == BTN_EDIT:
+            show_edit_menu(chat_id); return
     
     # state machine
     if user_id in admin_user_states:
@@ -179,6 +193,106 @@ def handle_admin_message(msg):
                 admin_send_message(chat_id, ADM_OP_ADDED, kb_admin())
             except:
                 admin_send_message(chat_id, INVALID_INPUT, kb_back())
+            return        
+        # ویرایش: افزودن دسته‌بندی
+        if step == "edit_cat_add":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                admin_user_states.pop(user_id, None)
+                show_edit_menu(chat_id)
+                return
+            new_cat = text.strip()
+            if not new_cat:
+                admin_send_message(chat_id, INVALID_INPUT, kb_back())
+                return
+            # ذخیره توی config
+            cfg = load_admin_config()
+            custom_cats = cfg.get("custom_categories", [])
+            if new_cat in custom_cats:
+                admin_send_message(chat_id, EDIT_CATEGORY_EXISTS, kb_back())
+                return
+            custom_cats.append(new_cat)
+            cfg["custom_categories"] = custom_cats
+            save_admin_config(cfg)
+            admin_user_states.pop(user_id, None)
+            admin_send_message(chat_id, EDIT_CATEGORY_ADDED, kb_edit_menu())
+            return
+        
+        # ویرایش: تعرفه جدید
+        if step == "edit_tariff":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                admin_user_states.pop(user_id, None)
+                show_edit_menu(chat_id)
+                return
+            try:
+                amount = int(text.strip().replace(",", "").replace("،", ""))
+                if amount < 10000 or amount > 10000000:
+                    raise ValueError
+            except:
+                admin_send_message(chat_id, EDIT_TARIFF_INVALID, kb_back())
+                return
+            cat = data.get("category", "")
+            cfg = load_admin_config()
+            tariffs = cfg.get("tariffs", {})
+            tariffs[cat] = amount
+            cfg["tariffs"] = tariffs
+            save_admin_config(cfg)
+            admin_user_states.pop(user_id, None)
+            admin_send_message(
+                chat_id,
+                EDIT_TARIFF_UPDATED.format(amount="{:,}".format(amount)),
+                kb_edit_menu()
+            )
+            return
+        
+        # ویرایش: آیدی نظرات
+        if step == "edit_feedback":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                admin_user_states.pop(user_id, None)
+                show_edit_menu(chat_id)
+                return
+            new_id = text.strip()
+            if not new_id.startswith("@"):
+                new_id = "@" + new_id
+            cfg = load_admin_config()
+            cfg["feedback_id"] = new_id
+            save_admin_config(cfg)
+            admin_user_states.pop(user_id, None)
+            admin_send_message(
+                chat_id,
+                EDIT_FEEDBACK_UPDATED.format(id=new_id),
+                kb_edit_menu()
+            )
+            return
+        
+        # ویرایش: شماره کارت
+        if step == "edit_card_number":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                admin_user_states.pop(user_id, None)
+                show_edit_menu(chat_id)
+                return
+            data["new_card"] = text.strip()
+            state["step"] = "edit_card_owner"
+            admin_send_message(chat_id, EDIT_CARD_OWNER_ASK, kb_back())
+            return
+        
+        if step == "edit_card_owner":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                admin_user_states.pop(user_id, None)
+                show_edit_menu(chat_id)
+                return
+            new_owner = text.strip()
+            new_card = data.get("new_card", "")
+            # ذخیره توی config
+            cfg = load_admin_config()
+            cfg["card_number"] = new_card
+            cfg["card_owner"] = new_owner
+            save_admin_config(cfg)
+            admin_user_states.pop(user_id, None)
+            admin_send_message(
+                chat_id,
+                EDIT_CARD_UPDATED.format(card=new_card, owner=new_owner),
+                kb_edit_menu()
+            )
             return
     
     # پیام نامشخص
@@ -240,6 +354,27 @@ def handle_admin_callback(cb):
                 return
             remove_operator(int(parts[2]))
             admin_send_message(chat_id, "حذف شد.", kb_admin())
+        elif action == "editcat":
+            show_categories_list(chat_id)
+        elif action == "edittariff":
+            show_tariffs_list(chat_id)
+        elif action == "editcat_add":
+            admin_user_states[user_id] = {"step": "edit_cat_add", "data": {}}
+            admin_send_message(chat_id, EDIT_CATEGORY_ASK_NEW, kb_back())
+        elif action == "editcat_del":
+            show_categories_delete(chat_id)
+        elif action == "tariff":
+            cat = parts[2] if len(parts) > 2 else ""
+            admin_user_states[user_id] = {"step": "edit_tariff", "data": {"category": cat}}
+            admin_send_message(chat_id, EDIT_TARIFF_ASK.format(category=cat), kb_back())
+        elif action == "editfeedback":
+            admin_user_states[user_id] = {"step": "edit_feedback", "data": {}}
+            admin_send_message(chat_id, EDIT_FEEDBACK_ASK, kb_back())
+        elif action == "editcard":
+            admin_user_states[user_id] = {"step": "edit_card_number", "data": {}}
+            admin_send_message(chat_id, EDIT_CARD_ASK, kb_back())
+        elif action == "backedit":
+            show_edit_menu(chat_id)
     except Exception as ex:
         print("[ADMIN CB ERROR]", str(ex)[:100])
     
@@ -442,6 +577,73 @@ def show_remove_operator(chat_id):
 def ask_change_password(chat_id, user_id):
     admin_user_states[user_id] = {"step": "adm_change_new", "data": {}}
     admin_send_message(chat_id, ADM_ENTER_NEW_PASS, kb_back())
+
+
+# ==================== منوی ویرایش ====================
+def show_edit_menu(chat_id):
+    admin_send_message(chat_id, EDIT_MENU_TITLE, kb_edit_menu())
+
+
+def show_categories_list(chat_id):
+    from handlers.register import SUBS_ELEC, SUBS_GAS, SUBS_COOL, SUBS_CAR
+    txt = EDIT_CATEGORIES_TITLE
+    txt += "1. 🔌 لوازم برقی\n"
+    txt += "2. 🔥 لوازم گازی\n"
+    txt += "3. ❄️ سرمایشی و گرمایشی\n"
+    txt += "4. 🚗 خودرو\n"
+    
+    cfg = load_admin_config()
+    custom_cats = cfg.get("custom_categories", [])
+    if custom_cats:
+        txt += "\n📌 دسته‌های سفارشی:\n"
+        for i, c in enumerate(custom_cats, 5):
+            txt += "{}. {}\n".format(i, c)
+    
+    admin_send_message(chat_id, txt, kb_categories_list())
+
+
+def show_categories_delete(chat_id):
+    cfg = load_admin_config()
+    custom_cats = cfg.get("custom_categories", [])
+    if not custom_cats:
+        admin_send_message(chat_id, "هیچ دسته سفارشی‌ای وجود نداره.", kb_edit_menu())
+        return
+    kb = {"inline_keyboard": []}
+    for c in custom_cats:
+        kb["inline_keyboard"].append([
+            {"text": "🗑 " + c, "callback_data": "adm:delcat:" + c}
+        ])
+    kb["inline_keyboard"].append([
+        {"text": BTN_BACK, "callback_data": "adm:backedit"}
+    ])
+    admin_send_message(chat_id, EDIT_CATEGORY_ASK_DELETE, kb)
+
+
+def show_tariffs_list(chat_id):
+    cfg = load_admin_config()
+    tariffs = cfg.get("tariffs", {})
+    
+    txt = EDIT_TARIFFS_TITLE
+    default_tariffs = {
+        "🔌 لوازم برقی": 40000,
+        "🔥 لوازم گازی": 70000,
+        "❄️ سرمایشی و گرمایشی": 90000,
+        "🚗 خودرو": 60000,
+    }
+    
+    kb = {"inline_keyboard": []}
+    for cat, default_amount in default_tariffs.items():
+        amount = tariffs.get(cat, default_amount)
+        txt += "• {}: {:,} تومان\n".format(cat, amount)
+        kb["inline_keyboard"].append([
+            {"text": "✏️ " + cat, "callback_data": "adm:tariff:" + cat}
+        ])
+    
+    kb["inline_keyboard"].append([
+        {"text": BTN_BACK, "callback_data": "adm:backedit"}
+    ])
+    
+    admin_send_message(chat_id, txt, kb)
 
 
 # ==================== حلقه اصلی ربات ادمین ====================
