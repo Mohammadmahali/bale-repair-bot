@@ -491,11 +491,6 @@ def deliver_expert(chat_id, customer_id, expert, info, send_phone):
     notify_expert(expert, info, code, send_phone)
     if expert.get("lat") and expert.get("lng"):
         send_message(chat_id, "📍 برای مسیریابی:", kb_navigation(expert["lat"], expert["lng"]))
-    # دکمه چت با تعمیرکار
-    chat_kb = {"inline_keyboard": [[
-        {"text": BTN_CHAT_EXPERT, "callback_data": "chatstart:" + str(expert["user_id"])}
-    ]]}
-    send_message(chat_id, "💬 برای چت با تعمیرکار:", chat_kb)
 
 
 def notify_expert(expert, info, code, send_phone):
