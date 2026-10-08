@@ -14,6 +14,8 @@ from texts import (
     ADM_ADD_OP, ADM_RM_OP, ADM_APPROVE, ADM_REJECT, ADM_BACK,
     ADM_TOGGLE_ON, ADM_TOGGLE_OFF, ADM_PREMIUM_ON, ADM_PREMIUM_OFF, ADM_DELETE,
     BTN_NAV_NESHAN, BTN_NAV_GOOGLE,
+    BTN_EDIT, BTN_EDIT_CATEGORIES, BTN_EDIT_TARIFFS,
+    BTN_EDIT_FEEDBACK, BTN_EDIT_CARD,
 )
 
 
@@ -111,6 +113,7 @@ def kb_admin():
         [{"text": ADM_JOBS}],
         [{"text": ADM_REVENUE}],
         [{"text": ADM_OPERATORS}],
+        [{"text": BTN_EDIT}],
         [{"text": ADM_CHANGE_PASS}],
         [{"text": ADM_EXIT}]
     ], "resize_keyboard": True}
@@ -265,3 +268,28 @@ def kb_chat_hide_confirm():
         {"text": "✅ بله، مخفی کن", "callback_data": "chathide:yes"},
         {"text": "❌ انصراف", "callback_data": "chathide:no"}
     ]]}
+
+
+# ==================== کیبورد ویرایش (ربات ادمین) ====================
+def kb_edit_menu():
+    return {"keyboard": [
+        [{"text": BTN_EDIT_CATEGORIES}],
+        [{"text": BTN_EDIT_TARIFFS}],
+        [{"text": BTN_EDIT_FEEDBACK}],
+        [{"text": BTN_EDIT_CARD}],
+        [{"text": BTN_BACK}]
+    ], "resize_keyboard": True}
+
+
+def kb_categories_list():
+    return {"inline_keyboard": [
+        [{"text": "➕ افزودن دسته جدید", "callback_data": "adm:editcat_add"}],
+        [{"text": "🗑 حذف دسته سفارشی", "callback_data": "adm:editcat_del"}],
+        [{"text": BTN_BACK, "callback_data": "adm:backedit"}]
+    ]}
+
+
+def kb_tariffs_list():
+    return {"inline_keyboard": [
+        [{"text": BTN_BACK, "callback_data": "adm:backedit"}]
+    ]}
