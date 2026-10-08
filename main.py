@@ -27,11 +27,22 @@ def start_health_server():
         print("Health server error:", str(ex)[:100])
 
 
-threading.Thread(target=start_health_server, daemon=True).start()
+threading.Thread(target=start_health_server, daemon=True).start() 
+
+# ==================== شروع ربات ادمین در thread جداگانه ====================
+def start_admin_bot_thread():
+    try:
+        from admin_bot import run_admin_bot
+        run_admin_bot()
+    except Exception as ex:
+        print("[ADMIN THREAD ERROR]", str(ex)[:100])
+
+
+threading.Thread(target=start_admin_bot_thread, daemon=True).start()
 
 
 # ==================== Import ها ====================
-from config import SUPER_ADMIN, TOKEN
+from config import SUPER_ADMIN, TOKEN, ADMIN_TOKEN
 from api import (
     send_message, answer_callback, get_me,
     get_updates, delete_webhook, clear_old_updates,
