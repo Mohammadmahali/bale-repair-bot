@@ -424,6 +424,15 @@ def _rank_score(e, priorities=None):
     return score
 
 
+def _calculate_commission(expert, sub_specialty):
+    """محاسبه کمیسیون بر اساس زیرتخصص"""
+    try:
+        from db import get_sub_tariff
+        return get_sub_tariff(sub_specialty)
+    except:
+        return 50000
+
+
 def _overall_rating(e):
     total = 0
     count = 0
