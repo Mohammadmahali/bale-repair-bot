@@ -42,7 +42,8 @@ def is_admin(user_id):
 
 # ==================== اعلان به مدیران ====================
 def notify_admins_new_expert(expert):
-    """اطلاع به مدیران از تعمیرکار جدید"""
+    """اطلاع به مدیران از تعمیرکار جدید (از طریق ربات ادمین)"""
+    from api_admin import admin_send_message
     msg = ADM_NEW_EXPERT + "\n\n"
     msg += LBL_NAME + " " + expert.get("name", "?") + "\n"
     msg += LBL_PHONE + " " + expert.get("phone", "?") + "\n"
@@ -51,9 +52,9 @@ def notify_admins_new_expert(expert):
     msg += LBL_AREA + " " + expert.get("area", "?") + "\n"
     
     kb = kb_approve_reject(expert["user_id"])
-    send_message(SUPER_ADMIN, msg, kb)
+    admin_send_message(SUPER_ADMIN, msg, kb)
     for op in get_operators():
-        send_message(op, msg, kb)
+        admin_send_message(op, msg, kb)
 
 
 # ==================== محاسبه امتیاز ====================
