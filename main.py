@@ -106,8 +106,9 @@ def handle_message(msg):
         photos = msg.get("photo", [])
         if photos:
             message_id = msg.get("message_id")
+            file_id = photos[-1].get("file_id")
             if user_id in sessions and sessions[user_id].get("step") == "wallet_receipt":
-                handle_receipt(chat_id, user_id, message_id, sessions)
+                handle_receipt(chat_id, user_id, message_id, sessions, file_id)
                 return
         return
     
