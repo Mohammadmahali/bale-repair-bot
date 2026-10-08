@@ -127,18 +127,15 @@ def handle_receipt(chat_id, user_id, message_id, sessions):
 
 
 def notify_admin_receipt(user_id, amount, message_id, txn_id, expert_chat_id):
-    """اطلاع به مدیر از رسید جدید"""
+    """اطلاع به مدیر از رسید جدید (از طریق ربات ادمین)"""
+    from api_admin import admin_send_message, admin_forward_message
     expert = find_expert_by_id(user_id)
     if not expert:
         return
     
-    # اول forward عکس رسید
+    # اول forward عکس رسید با ربات ادمین
     try:
-        api_call("forwardMessage", {
-            "chat_id": SUPER_ADMIN,
-            "from_chat_id": expert_chat_id,
-            "message_id": message_id
-        })
+        admin_forward_message(SUPER_ADMIN, expert_chat_id, message_id)
     except Exception as ex:
         print("Forward error:", str(ex)[:100])
     
@@ -152,16 +149,12 @@ def notify_admin_receipt(user_id, amount, message_id, txn_id, expert_chat_id):
     )
     
     kb = kb_wallet_admin(txn_id)
-    send_message(SUPER_ADMIN, txt, kb)
+    admin_send_message(SUPER_ADMIN, txt, kb)
     
     # برای اپراتورها
     for op in get_operators():
         try:
-            api_call("forwardMessage", {
-                "chat_id": op,
-                "from_chat_id": expert_chat_id,
-                "message_id": message_id
-            })
-            send_message(op, txt, kb)
+            admin_forward_message(op, expert_chat_id, message_id)
+            admin_send_message(op, txt, kb)
         except:
             pass
