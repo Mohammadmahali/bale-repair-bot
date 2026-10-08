@@ -118,6 +118,18 @@ def handle_admin_message(msg):
             ask_change_password(chat_id, user_id); return 
         if text == BTN_EDIT:
             show_edit_menu(chat_id); return
+        if text == BTN_EDIT_CATEGORIES:
+            show_categories_list(chat_id); return
+        if text == BTN_EDIT_TARIFFS:
+            show_tariffs_list(chat_id); return
+        if text == BTN_EDIT_FEEDBACK:
+            admin_user_states[user_id] = {"step": "edit_feedback", "data": {}}
+            admin_send_message(chat_id, EDIT_FEEDBACK_ASK, kb_back())
+            return
+        if text == BTN_EDIT_CARD:
+            admin_user_states[user_id] = {"step": "edit_card_number", "data": {}}
+            admin_send_message(chat_id, EDIT_CARD_ASK, kb_back())
+            return
     
     # state machine
     if user_id in admin_user_states:
