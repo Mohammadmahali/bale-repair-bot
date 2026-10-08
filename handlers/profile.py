@@ -1,4 +1,4 @@
-# ==================== پروفایل تعمیرکار ====================
+# ==================== پروفایل ====================
 import time
 import config
 from config import DB_FILE, FREE_DAYS
@@ -12,10 +12,13 @@ from texts import (
     RESPONSE_TIMES, REPAIR_TIMES,
     BTN_SHOP_STATUS, BTN_WALLET, BTN_BACK,
     LOCATION_WARNING,
+    CUSTOMER_PROFILE_TITLE, CUSTOMER_NO_ACTIVITY, CUSTOMER_SUMMARY,
+    CUSTOMER_TOTAL, CUSTOMER_LAST, CUSTOMER_ITEM_HEADER,
+    CUSTOMER_HISTORY_FOOTER,
 )
-from keyboards import kb_main, kb_share_link, kb_profile, kb_profile_location
+from keyboards import kb_main, kb_share_link, kb_profile, kb_profile_location, kb_share_link_with_qr
 from api import send_message
-from db import find_expert_by_id, is_shop_open
+from db import find_expert_by_id, is_shop_open, get_customer_history
 from utils import gen_expert_code
 from db import load_experts, save_experts
 
@@ -102,13 +105,15 @@ def get_shop_label(expert):
     return SHOP_ACTIVE
 
 
-# ==================== نمایش پروفایل ====================
+# ==================== نمایش پروفایل (تعمیرکار یا مشتری) ====================
 def show_profile(chat_id, user_id):
     expert = find_expert_by_id(user_id)
     if not expert:
-        send_message(chat_id, NO_PROFILE, kb_main())
+        # کاربر مشتری است → نمایش تاریخچه
+        show_customer_profile(chat_id, user_id)
         return
     
+    # پروفایل تعمیرکار
     txt = MY_PROFILE
     txt += LBL_NAME + " " + expert.get("name", "?") + "\n"
     txt += LBL_ROLE + " " + expert.get("category", "?") + "\n"
@@ -148,6 +153,60 @@ def show_profile(chat_id, user_id):
     send_message(chat_id, "👤 منوی پروفایل:", kb_profile())
 
 
+# ==================== پروفایل مشتری ====================
+def show_customer_profile(chat_id, user_id):
+    """نمایش تاریخچه درخواست‌های مشتری"""
+    jobs = get_customer_history(user_id, 10)
+    
+    if not jobs:
+        send_message(chat_id, CUSTOMER_NO_ACTIVITY, kb_main())
+        return
+    
+    txt = CUSTOMER_PROFILE_TITLE
+    txt += CUSTOMER_SUMMARY
+    txt += CUSTOMER_TOTAL + str(len(jobs)) + "\n"
+    
+    # آخرین درخواست
+    last_time = jobs[0].get("created_at", 0)
+    if last_time:
+        days_ago = int((time.time() - last_time) / 86400)
+        if days_ago == 0:
+            last_str = "امروز"
+        elif days_ago == 1:
+            last_str = "دیروز"
+        else:
+            last_str = "{} روز پیش".format(days_ago)
+        txt += CUSTOMER_LAST + last_str + "\n"
+    
+    txt += "\n"
+    
+    # لیست درخواست‌ها
+    for j in jobs[:10]:
+        info = j.get("info", {})
+        created = j.get("created_at", 0)
+        days_ago = int((time.time() - created) / 86400)
+        if days_ago == 0:
+            date_str = "امروز"
+        elif days_ago == 1:
+            date_str = "دیروز"
+        else:
+            date_str = "{} روز پیش".format(days_ago)
+        
+        txt += CUSTOMER_ITEM_HEADER
+        txt += "📅 " + date_str + "\n"
+        if info.get("sub"):
+            txt += "🔧 " + info["sub"] + "\n"
+        txt += "👤 " + j.get("expert_name", "?") + "\n"
+        if info.get("phone"):
+            txt += "📞 " + info["phone"] + "\n"
+        txt += "🎫 " + j.get("tracking_code", "?") + "\n\n"
+    
+    txt += CUSTOMER_HISTORY_FOOTER
+    
+    send_message(chat_id, txt, kb_main())
+
+
+# ==================== لینک اختصاصی + QR ====================
 def _show_expert_link(chat_id, user_id, expert):
     code = expert.get("expert_code", "")
     if not code:
@@ -161,7 +220,7 @@ def _show_expert_link(chat_id, user_id, expert):
     
     link = _build_expert_link(code)
     txt = LBL_CODE + code + "\n\n" + LBL_LINK + link + SHARE_HINT
-    send_message(chat_id, txt, kb_share_link(link))
+    send_message(chat_id, txt, kb_share_link_with_qr(link))
 
 
 def _build_expert_link(code):
