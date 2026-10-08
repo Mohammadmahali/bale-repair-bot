@@ -545,3 +545,35 @@ def get_sub_by_index(cat_label, idx):
     if 0 <= idx < len(subs):
         return subs[idx]
     return None
+
+
+# ==================== تعرفه زیرتخصص ====================
+def get_sub_tariff(sub_specialty):
+    """گرفتن تعرفه یه زیرتخصص"""
+    from config import SUB_TARIFFS
+    # اول از config کاربر چک کن
+    tariffs = db_sql.config_get("sub_tariffs", {})
+    if sub_specialty in tariffs:
+        return tariffs[sub_specialty]
+    # بعد از SUB_TARIFFS پیش‌فرض
+    if sub_specialty in SUB_TARIFFS:
+        return SUB_TARIFFS[sub_specialty]
+    # اگه پیدا نشد، 50000
+    return 50000
+
+
+def set_sub_tariff(sub_specialty, amount):
+    """ذخیره تعرفه زیرتخصص"""
+    tariffs = db_sql.config_get("sub_tariffs", {})
+    tariffs[sub_specialty] = amount
+    db_sql.config_set("sub_tariffs", tariffs)
+    return True
+
+
+def get_all_sub_tariffs():
+    """گرفتن همه تعرفه‌های زیرتخصص (پیش‌فرض + کاربر)"""
+    from config import SUB_TARIFFS
+    user_tariffs = db_sql.config_get("sub_tariffs", {})
+    result = dict(SUB_TARIFFS)
+    result.update(user_tariffs)
+    return result
