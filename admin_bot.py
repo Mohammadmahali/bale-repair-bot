@@ -364,7 +364,20 @@ def handle_admin_callback(cb):
         return
     
     parts = data.split(":")
-    action = parts[1] if len(parts) > 1 else ""
+    action = parts[1] if len(parts) > 1 else ""    
+
+    # ===== تأیید/رد شارژ کیف پول =====
+    if data.startswith("wadm:"):
+        sub_action = parts[1]
+        txn_id = int(parts[2])
+        if sub_action == "approve":
+            from admin import approve_wallet_txn
+            approve_wallet_txn(txn_id, chat_id, user_id)
+        elif sub_action == "reject":
+            from admin import reject_wallet_txn
+            reject_wallet_txn(txn_id, chat_id, user_id)
+        admin_answer_callback(cb_id)
+        return
     
     try:
         if action == "exp":
