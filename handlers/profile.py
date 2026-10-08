@@ -140,14 +140,11 @@ def show_profile(chat_id, user_id):
     
     send_message(chat_id, txt, kb_main())
     
-    # نمایش کد اختصاصی و لینک
     _show_expert_link(chat_id, user_id, expert)
     
-    # هشدار لوکیشن
     if not expert.get("lat") or not expert.get("lng"):
         send_message(chat_id, LOCATION_WARNING, kb_profile_location())
     
-    # منوی پروفایل
     send_message(chat_id, "👤 منوی پروفایل:", kb_profile())
 
 
@@ -176,7 +173,6 @@ def _build_expert_link(code):
 
 # ==================== ذخیره لوکیشن از پروفایل ====================
 def handle_profile_location(chat_id, user_id, location):
-    """ذخیره لوکیشن از پروفایل"""
     experts = load_experts()
     for e in experts:
         if e.get("user_id") == user_id:
