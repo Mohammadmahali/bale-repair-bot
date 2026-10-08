@@ -11,7 +11,8 @@ from api_admin import (
 from keyboards import (
     kb_admin, kb_back, kb_main,
     kb_edit_menu, kb_categories_list, kb_tariffs_list,
-)from texts import (
+)
+from texts import (
     ADM_TITLE, ADM_ASK_PASS, ADM_WRONG_PASS, ADM_NOT_AUTH,
     ADM_STATS, ADM_EXPERTS, ADM_PENDING, ADM_JOBS, ADM_REVENUE,
     ADM_OPERATORS, ADM_CHANGE_PASS, ADM_EXIT,
