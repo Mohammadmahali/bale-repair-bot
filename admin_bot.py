@@ -208,7 +208,30 @@ def handle_admin_message(msg):
                 admin_send_message(chat_id, INVALID_INPUT, kb_back())
             return        
         # ویرایش: افزودن دسته‌بندی
-        if step == "edit_cat_add":
+        if step == "edit_cat_add":        
+        # ویرایش: افزودن زیرتخصص
+        if step == "edit_sub_add":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                admin_user_states.pop(user_id, None)
+                show_edit_menu(chat_id)
+                return
+            new_sub = text.strip()
+            if not new_sub:
+                admin_send_message(chat_id, INVALID_INPUT, kb_back())
+                return
+            cat_idx = data.get("cat_idx", -1)
+            from db import get_category_by_index, add_sub_db
+            cat = get_category_by_index(cat_idx)
+            if not cat:
+                admin_send_message(chat_id, "دسته پیدا نشد.", kb_edit_menu())
+                admin_user_states.pop(user_id, None)
+                return
+            if add_sub_db(cat, new_sub):
+                admin_send_message(chat_id, "✅ زیرتخصص «{}» اضافه شد.".format(new_sub), kb_edit_menu())
+            else:
+                admin_send_message(chat_id, "⚠️ این زیرتخصص قبلاً وجود داره.", kb_edit_menu())
+            admin_user_states.pop(user_id, None)
+            return
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
                 show_edit_menu(chat_id)
@@ -388,6 +411,39 @@ def handle_admin_callback(cb):
             admin_send_message(chat_id, EDIT_CARD_ASK, kb_back())
         elif action == "backedit":
             show_edit_menu(chat_id)
+        elif action == "editcatlist":
+            show_categories_list(chat_id)
+        elif action == "editcat":
+            show_category_detail(chat_id, int(parts[2]))
+        elif action == "addcat":
+            admin_user_states[user_id] = {"step": "edit_cat_add", "data": {}}
+            admin_send_message(chat_id, "📂 نام دسته‌بندی جدید را وارد کنید:", kb_back())
+        elif action == "addsub":
+            cat_idx = int(parts[2])
+            admin_user_states[user_id] = {"step": "edit_sub_add", "data": {"cat_idx": cat_idx}}
+            admin_send_message(chat_id, "📝 نام زیرتخصص جدید را وارد کنید:", kb_back())
+        elif action == "delsublist":
+            show_subs_delete_list(chat_id, int(parts[2]))
+        elif action == "delsubid":
+            cat_idx = int(parts[2])
+            sub_idx = int(parts[3])
+            from db import get_category_by_index, get_sub_by_index, remove_sub_db
+            cat = get_category_by_index(cat_idx)
+            sub = get_sub_by_index(cat, sub_idx)
+            if cat and sub:
+                remove_sub_db(cat, sub)
+                admin_send_message(chat_id, "✅ «{}» حذف شد.".format(sub), kb_edit_menu())
+            else:
+                admin_send_message(chat_id, "خطا در حذف.", kb_edit_menu())
+        elif action == "delcat":
+            cat_idx = int(parts[2])
+            from db import get_category_by_index, remove_category_db
+            cat = get_category_by_index(cat_idx)
+            if cat:
+                remove_category_db(cat)
+                admin_send_message(chat_id, "✅ دسته حذف شد.", kb_edit_menu())
+            else:
+                admin_send_message(chat_id, "خطا در حذف.", kb_edit_menu())
     except Exception as ex:
         print("[ADMIN CB ERROR]", str(ex)[:100])
     
@@ -594,74 +650,84 @@ def ask_change_password(chat_id, user_id):
 
 # ==================== منوی ویرایش ====================
 def show_edit_menu(chat_id):
-    admin_send_message(chat_id, EDIT_MENU_TITLE, kb_edit_menu())
+    admin_send_message(chat_id, "✏️ منوی ویرایش\n\nیکی از گزینه‌ها را انتخاب کنید:", kb_edit_menu())
 
 
 def show_categories_list(chat_id):
-    from handlers.register import SUBS_ELEC, SUBS_GAS, SUBS_COOL, SUBS_CAR
-    txt = EDIT_CATEGORIES_TITLE
-    txt += "1. 🔌 لوازم برقی\n"
-    txt += "2. 🔥 لوازم گازی\n"
-    txt += "3. ❄️ سرمایشی و گرمایشی\n"
-    txt += "4. 🚗 خودرو\n"
+    """نمایش لیست دسته‌بندی‌ها"""
+    from db import get_all_categories
+    cats = get_all_categories()
     
-    cfg = load_admin_config()
-    custom_cats = cfg.get("custom_categories", [])
-    if custom_cats:
-        txt += "\n📌 دسته‌های سفارشی:\n"
-        for i, c in enumerate(custom_cats, 5):
-            txt += "{}. {}\n".format(i, c)
-    
-    admin_send_message(chat_id, txt, kb_categories_list())
-
-
-def show_categories_delete(chat_id):
-    cfg = load_admin_config()
-    custom_cats = cfg.get("custom_categories", [])
-    if not custom_cats:
-        admin_send_message(chat_id, "هیچ دسته سفارشی‌ای وجود نداره.", kb_edit_menu())
-        return
+    txt = "📂 مدیریت دسته‌بندی‌ها\n\n"
     kb = {"inline_keyboard": []}
-    for c in custom_cats:
-        kb["inline_keyboard"].append([
-            {"text": "🗑 " + c, "callback_data": "adm:delcat:" + c}
-        ])
-    kb["inline_keyboard"].append([
-        {"text": BTN_BACK, "callback_data": "adm:backedit"}
-    ])
-    admin_send_message(chat_id, EDIT_CATEGORY_ASK_DELETE, kb)
-
-
-def show_tariffs_list(chat_id):
-    cfg = load_admin_config()
-    tariffs = cfg.get("tariffs", {})
     
-    txt = EDIT_TARIFFS_TITLE
-    default_tariffs = {
-        "🔌 لوازم برقی": 40000,
-        "🔥 لوازم گازی": 70000,
-        "❄️ سرمایشی و گرمایشی": 90000,
-        "🚗 خودرو": 60000,
-    }
-    
-    kb = {"inline_keyboard": []}
-    for cat, default_amount in default_tariffs.items():
-        amount = tariffs.get(cat, default_amount)
-        txt += "• {}: {:,} تومان\n".format(cat, amount)
+    for idx, (cat, subs) in enumerate(cats.items()):
+        txt += "{}. {} ({} زیرتخصص)\n".format(idx + 1, cat, len(subs))
         kb["inline_keyboard"].append([
-            {"text": "✏️ " + cat, "callback_data": "adm:tariff:" + cat}
+            {"text": "✏️ " + cat, "callback_data": "adm:editcat:" + str(idx)}
         ])
     
     kb["inline_keyboard"].append([
+        {"text": "➕ افزودن دسته جدید", "callback_data": "adm:addcat"}
+    ])
+    kb["inline_keyboard"].append([
         {"text": BTN_BACK, "callback_data": "adm:backedit"}
     ])
-    
     admin_send_message(chat_id, txt, kb)
+
+
+def show_category_detail(chat_id, cat_idx):
+    """نمایش جزئیات یه دسته"""
+    from db import get_category_by_index, get_category_subs
+    cat = get_category_by_index(cat_idx)
+    if not cat:
+        admin_send_message(chat_id, "دسته پیدا نشد.", kb_edit_menu())
+        return
+    
+    subs = get_category_subs(cat)
+    txt = "📂 دسته: {}\n\n".format(cat)
+    if subs:
+        for i, s in enumerate(subs, 1):
+            txt += "{}. {}\n".format(i, s)
+    else:
+        txt += "هنوز زیرتخصصی نداره.\n"
+    
+    kb = {"inline_keyboard": [
+        [{"text": "➕ افزودن زیرتخصص", "callback_data": "adm:addsub:" + str(cat_idx)}],
+        [{"text": "🗑 حذف زیرتخصص", "callback_data": "adm:delsublist:" + str(cat_idx)}],
+        [{"text": "🗑 حذف کل دسته", "callback_data": "adm:delcat:" + str(cat_idx)}],
+        [{"text": BTN_BACK, "callback_data": "adm:editcatlist"}]
+    ]}
+    admin_send_message(chat_id, txt, kb)
+
+
+def show_subs_delete_list(chat_id, cat_idx):
+    """نمایش لیست زیرتخصص‌ها برای حذف"""
+    from db import get_category_by_index, get_category_subs
+    cat = get_category_by_index(cat_idx)
+    if not cat:
+        admin_send_message(chat_id, "دسته پیدا نشد.", kb_edit_menu())
+        return
+    
+    subs = get_category_subs(cat)
+    if not subs:
+        admin_send_message(chat_id, "زیرتخصصی برای حذف وجود نداره.", kb_edit_menu())
+        return
+    
+    kb = {"inline_keyboard": []}
+    for i, s in enumerate(subs):
+        kb["inline_keyboard"].append([
+            {"text": "🗑 " + s, "callback_data": "adm:delsubid:" + str(cat_idx) + ":" + str(i)}
+        ])
+    kb["inline_keyboard"].append([
+        {"text": BTN_BACK, "callback_data": "adm:editcat:" + str(cat_idx)}
+    ])
+    admin_send_message(chat_id, "روی زیرتخصصی که می‌خواهید حذف کنید بزنید:", kb)
 
 
 # ==================== حلقه اصلی ربات ادمین ====================
 def run_admin_bot():
-    """حلقه اصلی ربات ادمین (توی thread جداگانه اجرا می‌شه)"""
+    """حلقه اصلی ربات ادمین"""
     print("[ADMIN] Starting admin bot...")
     
     try:
