@@ -365,14 +365,34 @@ def get_expert_wallet_history(user_id, limit=10):
 
 
 def is_expert_in_free_period(expert):
-    """آیا تعمیرکار توی ۲ ماه اول هست؟"""
-    from config import FREE_DAYS
+    """آیا تعمیرکار توی دوره رایگان هست؟
+    رایگان تا دیرتر از دو حالت:
+    - FREE_DAYS روز گذشته
+    - FREE_CUSTOMERS مشتری استفاده شده
+    """
+    from config import FREE_DAYS, FREE_CUSTOMERS
     created_at = expert.get("created_at", 0)
     if not created_at:
         return True
     now = int(time.time())
-    free_until = created_at + (FREE_DAYS * 86400)
-    return now < free_until
+    days_passed = (now - created_at) / 86400
+    customers_used = expert.get("referral_count", 0)
+    
+    time_done = days_passed >= FREE_DAYS
+    customers_done = customers_used >= FREE_CUSTOMERS
+    
+    # خارج از رایگان فقط وقتی هر دو تموم شده باشن
+    if time_done and customers_done:
+        return False
+    return True
+
+
+def get_customer_history(customer_id, limit=20):
+    """تاریخچه درخواست‌های یه مشتری"""
+    jobs = load_jobs()
+    result = [j for j in jobs if j.get("customer_id") == customer_id]
+    result.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+    return result[:limit]
 
 
 def get_expert_priority_penalty(expert):
