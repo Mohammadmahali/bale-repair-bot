@@ -207,10 +207,47 @@ def handle_admin_message(msg):
             except:
                 admin_send_message(chat_id, INVALID_INPUT, kb_back())
             return        
-        # ویرایش: افزودن دسته‌بندی
-        if step == "edit_cat_add":        
+                # ویرایش: افزودن دسته‌بندی
+        if step == "edit_cat_add":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                admin_user_states.pop(user_id, None)
+                show_edit_menu(chat_id)
+                return
+            new_cat = text.strip()
+            if not new_cat:
+                admin_send_message(chat_id, INVALID_INPUT, kb_back())
+                return
+            from db import add_category_db
+            if add_category_db(new_cat):
+                admin_send_message(chat_id, "✅ دسته‌بندی «{}» اضافه شد.".format(new_cat), kb_edit_menu())
+            else:
+                admin_send_message(chat_id, "⚠️ این دسته‌بندی قبلاً وجود داره.", kb_edit_menu())
+            admin_user_states.pop(user_id, None)
+            return
+        
         # ویرایش: افزودن زیرتخصص
         if step == "edit_sub_add":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                admin_user_states.pop(user_id, None)
+                show_edit_menu(chat_id)
+                return
+            new_sub = text.strip()
+            if not new_sub:
+                admin_send_message(chat_id, INVALID_INPUT, kb_back())
+                return
+            cat_idx = data.get("cat_idx", -1)
+            from db import get_category_by_index, add_sub_db
+            cat = get_category_by_index(cat_idx)
+            if not cat:
+                admin_send_message(chat_id, "دسته پیدا نشد.", kb_edit_menu())
+                admin_user_states.pop(user_id, None)
+                return
+            if add_sub_db(cat, new_sub):
+                admin_send_message(chat_id, "✅ زیرتخصص «{}» اضافه شد.".format(new_sub), kb_edit_menu())
+            else:
+                admin_send_message(chat_id, "⚠️ این زیرتخصص قبلاً وجود داره.", kb_edit_menu())
+            admin_user_states.pop(user_id, None)
+            return
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
                 show_edit_menu(chat_id)
