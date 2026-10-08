@@ -60,15 +60,13 @@ PREV_STEP = {
 
 
 def get_subs_by_category(category):
-    if category == CAT_ELEC: return SUBS_ELEC
-    if category == CAT_GAS: return SUBS_GAS
-    if category == CAT_COOL: return SUBS_COOL
-    if category == CAT_CAR: return SUBS_CAR
-    return []
+    from db import get_category_subs
+    return get_category_subs(category)
 
 
 def is_valid_category(text):
-    return text in [CAT_ELEC, CAT_GAS, CAT_COOL, CAT_CAR]
+    from db import get_all_categories
+    return text in get_all_categories().keys()
 
 
 # ==================== نرمال‌سازی شهر ====================
