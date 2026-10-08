@@ -7,8 +7,6 @@ from texts import (
     SHOP_ACTIVE, SHOP_CLOSED_TEMP, SHOP_CLOSED_PERM,
     BTN_SHARE, BTN_COPY_LINK,
     BTN_WALLET, BTN_CHARGE_WALLET, BTN_SET_LOCATION,
-    BTN_CHAT_EXPERT, BTN_CHAT_CUSTOMER, BTN_MY_CHATS,
-    BTN_CHAT_BACK, BTN_CHAT_HIDE, BTN_CHAT_SHARE_PHONE, BTN_CHAT_REFRESH,
     ADM_STATS, ADM_EXPERTS, ADM_PENDING, ADM_JOBS, ADM_REVENUE,
     ADM_OPERATORS, ADM_CHANGE_PASS, ADM_EXIT,
     ADM_ADD_OP, ADM_RM_OP, ADM_APPROVE, ADM_REJECT, ADM_BACK,
@@ -19,7 +17,6 @@ from texts import (
 )
 
 
-# ==================== کیبورد اصلی ====================
 def kb_main():
     return {"keyboard": [
         [{"text": BTN_REGISTER}],
@@ -30,7 +27,6 @@ def kb_main():
     ], "resize_keyboard": True}
 
 
-# ==================== کیبورد دسته‌بندی ====================
 def kb_categories():
     return {"keyboard": [
         [{"text": CAT_ELEC}],
@@ -41,7 +37,6 @@ def kb_categories():
     ], "resize_keyboard": True, "one_time_keyboard": True}
 
 
-# ==================== کیبورد بله/خیر ====================
 def kb_yes_no():
     return {"keyboard": [
         [{"text": YES}, {"text": NO}],
@@ -49,12 +44,10 @@ def kb_yes_no():
     ], "resize_keyboard": True, "one_time_keyboard": True}
 
 
-# ==================== کیبورد بازگشت ====================
 def kb_back():
     return {"keyboard": [[{"text": BTN_BACK}]], "resize_keyboard": True}
 
 
-# ==================== کیبورد ارسال لوکیشن ====================
 def kb_location():
     return {"keyboard": [
         [{"text": "📍 ارسال موقعیت من", "request_location": True}],
@@ -62,12 +55,10 @@ def kb_location():
     ], "resize_keyboard": True, "one_time_keyboard": True}
 
 
-# ==================== کیبورد فقط متن ====================
 def kb_text_only():
     return {"keyboard": [[{"text": BTN_BACK}]], "resize_keyboard": True}
 
 
-# ==================== کیبورد انتخاب تعمیرکار ====================
 def kb_who_picks():
     return {"keyboard": [
         [{"text": WHO_ME}],
@@ -76,7 +67,6 @@ def kb_who_picks():
     ], "resize_keyboard": True, "one_time_keyboard": True}
 
 
-# ==================== کیبورد وضعیت مغازه ====================
 def kb_shop_status():
     return {"keyboard": [
         [{"text": SHOP_ACTIVE}],
@@ -86,17 +76,14 @@ def kb_shop_status():
     ], "resize_keyboard": True, "one_time_keyboard": True}
 
 
-# ==================== کیبورد پروفایل ====================
 def kb_profile():
     return {"keyboard": [
         [{"text": BTN_WALLET}],
-        [{"text": BTN_MY_CHATS}],
         [{"text": BTN_SHOP_STATUS}],
         [{"text": BTN_BACK}]
     ], "resize_keyboard": True}
 
 
-# ==================== کیبورد کیف پول ====================
 def kb_wallet():
     return {"keyboard": [
         [{"text": BTN_CHARGE_WALLET}],
@@ -104,7 +91,6 @@ def kb_wallet():
     ], "resize_keyboard": True}
 
 
-# ==================== کیبورد ادمین ====================
 def kb_admin():
     return {"keyboard": [
         [{"text": ADM_STATS}],
@@ -119,7 +105,6 @@ def kb_admin():
     ], "resize_keyboard": True}
 
 
-# ==================== کیبورد ستاره‌ها (inline) ====================
 def kb_stars(criteria_key):
     return {"inline_keyboard": [[
         {"text": "1⭐", "callback_data": "crit:" + criteria_key + ":1"},
@@ -130,7 +115,6 @@ def kb_stars(criteria_key):
     ]]}
 
 
-# ==================== کیبورد اشتراک‌گذاری لینک ====================
 def kb_share_link(url):
     return {"inline_keyboard": [
         [{"text": BTN_SHARE, "url": url}],
@@ -138,7 +122,6 @@ def kb_share_link(url):
     ]}
 
 
-# ==================== کیبورد مسیریابی ====================
 def kb_navigation(lat, lng):
     neshan_web = "https://neshan.org/maps/@{},{}".format(lat, lng)
     google_url = "https://www.google.com/maps?q={},{}".format(lat, lng)
@@ -148,7 +131,6 @@ def kb_navigation(lat, lng):
     ]}
 
 
-# ==================== کیبورد تأیید/رد (ادمین) ====================
 def kb_approve_reject(user_id):
     return {"inline_keyboard": [[
         {"text": ADM_APPROVE, "callback_data": "adm:appr:" + str(user_id)},
@@ -156,7 +138,6 @@ def kb_approve_reject(user_id):
     ]]}
 
 
-# ==================== کیبورد جزئیات تعمیرکار (ادمین) ====================
 def kb_expert_detail(expert_id, is_active, is_premium):
     return {"inline_keyboard": [
         [{"text": ADM_TOGGLE_OFF if is_active else ADM_TOGGLE_ON,
@@ -170,7 +151,6 @@ def kb_expert_detail(expert_id, is_active, is_premium):
     ]}
 
 
-# ==================== کیبورد مدیریت اپراتورها ====================
 def kb_operators():
     return {"inline_keyboard": [
         [{"text": ADM_ADD_OP, "callback_data": "adm:addop"}],
@@ -179,7 +159,6 @@ def kb_operators():
     ]}
 
 
-# ==================== کیبورد کیف پول (ادمین) ====================
 def kb_wallet_admin(txn_id):
     return {"inline_keyboard": [[
         {"text": "✅ تأیید", "callback_data": "wadm:approve:" + str(txn_id)},
@@ -187,7 +166,6 @@ def kb_wallet_admin(txn_id):
     ]]}
 
 
-# ==================== کیبورد تأیید شهر (Fuzzy) ====================
 def kb_city_confirm(suggested_city):
     return {"inline_keyboard": [[
         {"text": "✅ بله، " + suggested_city, "callback_data": "cityfuzzy:yes"},
@@ -195,7 +173,6 @@ def kb_city_confirm(suggested_city):
     ]]}
 
 
-# ==================== کیبورد چند شهر مشابه ====================
 def kb_city_multiple(cities):
     keyboard = []
     for i, city in enumerate(cities, 1):
@@ -206,68 +183,17 @@ def kb_city_multiple(cities):
     return {"inline_keyboard": keyboard}
 
 
-# ==================== کیبورد لوکیشن از پروفایل ====================
 def kb_profile_location():
     return {"inline_keyboard": [[
         {"text": BTN_SET_LOCATION, "callback_data": "profile:set_location"}
     ]]}
 
 
-# ==================== کیبورد ارسال لوکیشن از پروفایل ====================
 def kb_profile_location_send():
     return {"keyboard": [
         [{"text": "📍 ارسال موقعیت من", "request_location": True}],
         [{"text": BTN_BACK}]
     ], "resize_keyboard": True, "one_time_keyboard": True}
-
-
-# ==================== کیبورد چت (مشتری) ====================
-def kb_chat_expert():
-    return {"keyboard": [
-        [{"text": BTN_CHAT_BACK}]
-    ], "resize_keyboard": True}
-
-
-# ==================== کیبورد چت (تعمیرکار) ====================
-def kb_chat_customer():
-    return {"keyboard": [
-        [{"text": BTN_CHAT_SHARE_PHONE}],
-        [{"text": BTN_CHAT_HIDE}],
-        [{"text": BTN_CHAT_BACK}]
-    ], "resize_keyboard": True}
-
-
-# ==================== کیبورد منوی چت ====================
-def kb_chat_menu():
-    return {"keyboard": [
-        [{"text": BTN_CHAT_REFRESH}],
-        [{"text": BTN_BACK}]
-    ], "resize_keyboard": True}
-
-
-# ==================== کیبورد فیلتر چت ====================
-def kb_chat_list():
-    return {"inline_keyboard": [
-        [{"text": "📋 همه", "callback_data": "chatfilter:all"}],
-        [{"text": "🔴 فقط نخونده‌ها", "callback_data": "chatfilter:unread"}],
-        [{"text": "📅 امروز", "callback_data": "chatfilter:today"}]
-    ]}
-
-
-# ==================== کیبورد تأیید اشتراک شماره ====================
-def kb_chat_share_phone_confirm():
-    return {"inline_keyboard": [[
-        {"text": "✅ بله", "callback_data": "chatphone:yes"},
-        {"text": "❌ خیر", "callback_data": "chatphone:no"}
-    ]]}
-
-
-# ==================== کیبورد تأیید مخفی کردن چت ====================
-def kb_chat_hide_confirm():
-    return {"inline_keyboard": [[
-        {"text": "✅ بله، مخفی کن", "callback_data": "chathide:yes"},
-        {"text": "❌ انصراف", "callback_data": "chathide:no"}
-    ]]}
 
 
 # ==================== کیبورد ویرایش (ربات ادمین) ====================
