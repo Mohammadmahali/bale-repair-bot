@@ -252,12 +252,12 @@ def handle_message(msg):
     
     if text == SHOP_CLOSED_PERM:
         set_permanent_close(chat_id, user_id); return
-    
+     
     # ===== پیش‌فرض =====
     send_message(chat_id, USE_MENU, kb_main())
 
 
-   # ==================== هندل Callback ====================
+# ==================== هندل Callback ====================
    def handle_callback(cb):
       cb_id = cb.get("id")
       user_id = cb.get("from", {}).get("id")
