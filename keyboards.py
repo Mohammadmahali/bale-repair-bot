@@ -13,7 +13,7 @@ from texts import (
     ADM_TOGGLE_ON, ADM_TOGGLE_OFF, ADM_PREMIUM_ON, ADM_PREMIUM_OFF, ADM_DELETE,
     BTN_NAV_NESHAN, BTN_NAV_GOOGLE,
     BTN_EDIT, BTN_EDIT_CATEGORIES, BTN_EDIT_TARIFFS,
-    BTN_EDIT_FEEDBACK, BTN_EDIT_CARD,
+    BTN_EDIT_FEEDBACK, BTN_EDIT_CARD, BTN_SHOW_QR,
 )
 
 
@@ -117,6 +117,16 @@ def kb_stars(criteria_key):
 
 def kb_share_link(url):
     return {"inline_keyboard": [
+        [{"text": BTN_SHARE, "url": url}],
+        [{"text": BTN_COPY_LINK, "copy_text": {"text": url}}]
+    ]}
+
+
+def kb_share_link_with_qr(url):
+    """کیبورد اشتراک‌گذاری لینک + QR"""
+    qr_url = "https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=" + url
+    return {"inline_keyboard": [
+        [{"text": BTN_SHOW_QR, "url": qr_url}],
         [{"text": BTN_SHARE, "url": url}],
         [{"text": BTN_COPY_LINK, "copy_text": {"text": url}}]
     ]}
