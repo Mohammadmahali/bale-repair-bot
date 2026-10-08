@@ -109,3 +109,18 @@ def admin_forward_message(chat_id, from_chat_id, message_id):
         "message_id": message_id
     }
     return admin_api_call("forwardMessage", data)
+
+
+def admin_send_photo(chat_id, photo_bytes, caption=""):
+    """ارسال عکس با ربات ادمین"""
+    url = ADMIN_API_URL + "/sendPhoto"
+    files = {"photo": ("receipt.jpg", photo_bytes, "image/jpeg")}
+    data = {"chat_id": chat_id}
+    if caption:
+        data["caption"] = caption
+    try:
+        r = admin_session.post(url, files=files, data=data, timeout=60)
+        return r.json()
+    except Exception as ex:
+        print("[admin sendPhoto]", str(ex)[:100])
+        return {"ok": False}
