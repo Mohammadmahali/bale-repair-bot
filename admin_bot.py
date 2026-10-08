@@ -42,6 +42,7 @@ from db import (
     get_all_categories, get_category_subs, add_category_db,
     remove_category_db, add_sub_db, remove_sub_db,
     get_category_by_index, get_sub_by_index,
+    get_sub_tariff, set_sub_tariff, get_all_sub_tariffs,
 )
 import config
 
@@ -251,7 +252,7 @@ def handle_admin_message(msg):
             admin_user_states.pop(user_id, None)
             return
         
-        # ویرایش: تعرفه جدید
+        # ویرایش: تعرفه جدید (قدیمی - برای سازگاری)
         if step == "edit_tariff":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -272,6 +273,32 @@ def handle_admin_message(msg):
             save_admin_config(cfg)
             admin_user_states.pop(user_id, None)
             admin_send_message(chat_id, EDIT_TARIFF_UPDATED.format(amount="{:,}".format(amount)), kb_edit_menu())
+            return
+        
+        # ویرایش: تعرفه زیرتخصص
+        if step == "edit_sub_tariff":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                admin_user_states.pop(user_id, None)
+                show_edit_menu(chat_id)
+                return
+            try:
+                amount = int(text.strip().replace(",", "").replace("،", ""))
+                if amount < 10000 or amount > 10000000:
+                    raise ValueError
+            except:
+                admin_send_message(chat_id, "❌ مبلغ نامعتبر. یه عدد بین 10,000 تا 10,000,000 وارد کنید.", kb_back())
+                return
+            sub = data.get("sub", "")
+            if sub:
+                set_sub_tariff(sub, amount)
+                admin_send_message(
+                    chat_id,
+                    "✅ تعرفه «{}» به {:,} تومان بروزرسانی شد.".format(sub, amount),
+                    kb_edit_menu()
+                )
+            else:
+                admin_send_message(chat_id, "خطا در ذخیره.", kb_edit_menu())
+            admin_user_states.pop(user_id, None)
             return
         
         # ویرایش: آیدی نظرات
@@ -330,7 +357,7 @@ def handle_admin_callback(cb):
     chat_id = cb.get("message", {}).get("chat", {}).get("id")
     data = cb.get("data", "")
     
-    print("[ADMIN CB]", user_id, data[:30])
+    print("[ADMIN CB]", user_id, data[:40])
     
     if not is_authed_admin(user_id):
         admin_answer_callback(cb_id, "دسترسی ندارید")
@@ -416,10 +443,25 @@ def handle_admin_callback(cb):
         elif action == "editcard":
             admin_user_states[user_id] = {"step": "edit_card_number", "data": {}}
             admin_send_message(chat_id, EDIT_CARD_ASK, kb_back())
-        elif action == "tariff":
-            cat = parts[2] if len(parts) > 2 else ""
-            admin_user_states[user_id] = {"step": "edit_tariff", "data": {"category": cat}}
-            admin_send_message(chat_id, EDIT_TARIFF_ASK.format(category=cat), kb_back())
+        elif action == "tariffcat":
+            show_sub_tariffs_list(chat_id, int(parts[2]))
+        elif action == "edittarifflist":
+            show_tariffs_list(chat_id)
+        elif action == "tariffsub":
+            cat_idx = int(parts[2])
+            sub_idx = int(parts[3])
+            cat = get_category_by_index(cat_idx)
+            sub = get_sub_by_index(cat, sub_idx)
+            if cat and sub:
+                admin_user_states[user_id] = {
+                    "step": "edit_sub_tariff",
+                    "data": {"cat_idx": cat_idx, "sub_idx": sub_idx, "sub": sub}
+                }
+                admin_send_message(
+                    chat_id,
+                    "💰 تعرفه جدید برای «{}» را وارد کنید (تومان):\n\nمثال: 50000".format(sub),
+                    kb_back()
+                )
     except Exception as ex:
         print("[ADMIN CB ERROR]", str(ex)[:200])
     
@@ -689,27 +731,49 @@ def show_subs_delete_list(chat_id, cat_idx):
 
 
 def show_tariffs_list(chat_id):
-    cfg = load_admin_config()
-    tariffs = cfg.get("tariffs", {})
+    """لیست دسته‌بندی‌ها برای ویرایش تعرفه"""
+    cats = get_all_categories()
     
     txt = "💰 ویرایش تعرفه‌ها\n\n"
-    default_tariffs = {
-        "🔌 لوازم برقی": 40000,
-        "🔥 لوازم گازی": 70000,
-        "❄️ سرمایشی و گرمایشی": 90000,
-        "🚗 خودرو": 60000,
-    }
+    txt += "یه دسته‌بندی رو انتخاب کنید تا تعرفه زیرتخصص‌هاش رو ببینید:\n\n"
     
     kb = {"inline_keyboard": []}
-    for cat, default_amount in default_tariffs.items():
-        amount = tariffs.get(cat, default_amount)
-        txt += "• {}: {:,} تومان\n".format(cat, amount)
+    for idx, (cat, subs) in enumerate(cats.items()):
         kb["inline_keyboard"].append([
-            {"text": "✏️ " + cat, "callback_data": "adm:tariff:" + cat}
+            {"text": "💰 " + cat, "callback_data": "adm:tariffcat:" + str(idx)}
         ])
     
     kb["inline_keyboard"].append([
         {"text": BTN_BACK, "callback_data": "adm:backedit"}
+    ])
+    
+    admin_send_message(chat_id, txt, kb)
+
+
+def show_sub_tariffs_list(chat_id, cat_idx):
+    """لیست زیرتخصص‌های یه دسته برای ویرایش تعرفه"""
+    cat = get_category_by_index(cat_idx)
+    if not cat:
+        admin_send_message(chat_id, "دسته پیدا نشد.", kb_edit_menu())
+        return
+    
+    subs = get_category_subs(cat)
+    if not subs:
+        admin_send_message(chat_id, "این دسته زیرتخصصی نداره.", kb_edit_menu())
+        return
+    
+    txt = "💰 تعرفه‌های «{}»\n\n".format(cat)
+    kb = {"inline_keyboard": []}
+    
+    for i, sub in enumerate(subs):
+        tariff = get_sub_tariff(sub)
+        txt += "• {}: {:,} تومان\n".format(sub, tariff)
+        kb["inline_keyboard"].append([
+            {"text": "✏️ {}".format(sub), "callback_data": "adm:tariffsub:" + str(cat_idx) + ":" + str(i)}
+        ])
+    
+    kb["inline_keyboard"].append([
+        {"text": BTN_BACK, "callback_data": "adm:edittarifflist"}
     ])
     
     admin_send_message(chat_id, txt, kb)
