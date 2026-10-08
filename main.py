@@ -5,7 +5,7 @@ import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 
-# ==================== Health Server (برای Runflare) ====================
+# ==================== Health Server ====================
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -48,14 +48,12 @@ from api import (
     send_message, answer_callback, get_me,
     get_updates, delete_webhook, clear_old_updates,
 )
-from keyboards import kb_main, kb_chat_menu, kb_profile_location_send
+from keyboards import kb_main, kb_profile_location_send
 from texts import (
     WELCOME, BTN_REGISTER, BTN_SEARCH_SIMPLE, BTN_SEARCH_ADVANCED,
     BTN_EXPERTS_LIST, BTN_MY_PROFILE, BTN_FEEDBACK, BTN_SHOP_STATUS,
     USE_MENU, YES, NO, SHOP_ACTIVE, SHOP_CLOSED_TEMP, SHOP_CLOSED_PERM,
     BTN_WALLET, BTN_CHARGE_WALLET,
-    BTN_CHAT_EXPERT, BTN_CHAT_CUSTOMER, BTN_MY_CHATS,
-    BTN_CHAT_BACK, BTN_CHAT_HIDE, BTN_CHAT_SHARE_PHONE, BTN_CHAT_REFRESH,
     PROFILE_LOCATION_SAVED,
     BTN_BACK,
 )
@@ -72,11 +70,6 @@ from handlers.search import (
 from handlers.profile import show_profile, handle_profile_location
 from handlers.wallet import (
     show_wallet, start_charge, handle_amount, handle_receipt,
-)
-from handlers.chat import (
-    start_chat_with_expert, start_chat_with_customer,
-    handle_chat_message, handle_chat_photo,
-    show_my_chats, open_chat, do_share_phone, do_hide_chat,
 )
 from handlers.rating import (
     start_rating, handle_rating_callback, check_followups,
@@ -108,14 +101,11 @@ def handle_message(msg):
     
     print(">>>", user_id, text[:30].encode("ascii", "replace").decode())
     
-    # ===== عکس (چت یا رسید کیف پول) =====
+    # ===== عکس (رسید کیف پول) =====
     if "photo" in msg:
         photos = msg.get("photo", [])
         if photos:
             message_id = msg.get("message_id")
-            if user_id in sessions and sessions[user_id].get("step") == "chat_active":
-                handle_chat_photo(chat_id, user_id, message_id, sessions)
-                return
             if user_id in sessions and sessions[user_id].get("step") == "wallet_receipt":
                 handle_receipt(chat_id, user_id, message_id, sessions)
                 return
@@ -123,13 +113,6 @@ def handle_message(msg):
     
     # ===== لوکیشن =====
     if location:
-        if user_id in sessions and sessions[user_id].get("step") == "chat_active":
-            chat_id_db = sessions[user_id]["data"].get("chat_id")
-            role = sessions[user_id]["data"].get("role")
-            if chat_id_db:
-                add_message(chat_id_db, user_id, role, "[لوکیشن]", 0, 0)
-                send_message(chat_id, "✅ لوکیشن ارسال شد.")
-            return
         if user_id in sessions and sessions[user_id].get("step") == "profile_location":
             handle_profile_location(chat_id, user_id, location)
             sessions.pop(user_id, None)
@@ -149,11 +132,6 @@ def handle_message(msg):
     # ===== اگه توی state خاصی هست =====
     if user_id in sessions:
         step = sessions[user_id].get("step", "")
-        
-        # چت فعال
-        if step == "chat_active":
-            if handle_chat_message(chat_id, user_id, text, sessions):
-                return
         
         # لوکیشن پروفایل - منتظر لوکیشن
         if step == "profile_location":
@@ -219,9 +197,6 @@ def handle_message(msg):
     if text == BTN_SHOP_STATUS:
         show_shop_status(chat_id, user_id); return
     
-    if text == BTN_MY_CHATS:
-        show_my_chats(chat_id, user_id); return
-    
     if text == BTN_WALLET:
         show_wallet(chat_id, user_id); return
     
@@ -248,36 +223,6 @@ def handle_callback(cb):
     user_id = cb.get("from", {}).get("id")
     chat_id = cb.get("message", {}).get("chat", {}).get("id")
     data = cb.get("data", "")
-    
-    # ===== callback شروع چت با تعمیرکار =====
-    if data.startswith("chatstart:"):
-        expert_id = int(data.split(":")[1])
-        start_chat_with_expert(chat_id, user_id, expert_id, sessions)
-        answer_callback(cb_id)
-        return
-    
-    # ===== callback باز کردن چت =====
-    if data.startswith("chatopen:"):
-        chat_id_db = int(data.split(":")[1])
-        open_chat(chat_id, user_id, chat_id_db, sessions)
-        answer_callback(cb_id)
-        return
-    
-    # ===== callback اشتراک شماره =====
-    if data.startswith("chatphone:"):
-        action = data.split(":")[1]
-        if action == "yes":
-            do_share_phone(chat_id, user_id, sessions)
-        answer_callback(cb_id)
-        return
-    
-    # ===== callback مخفی کردن چت =====
-    if data.startswith("chathide:"):
-        action = data.split(":")[1]
-        if action == "yes":
-            do_hide_chat(chat_id, user_id, sessions)
-        answer_callback(cb_id)
-        return
     
     # ===== callback ثبت لوکیشن از پروفایل =====
     if data == "profile:set_location":
@@ -354,13 +299,6 @@ def handle_callback(cb):
         answer_callback(cb_id, "✅")
         return
     
-    # ===== callback فیلتر چت =====
-    if data.startswith("chatfilter:"):
-        filter_type = data.split(":")[1]
-        show_my_chats(chat_id, user_id, filter_type)
-        answer_callback(cb_id)
-        return
-    
     answer_callback(cb_id)
 
 
@@ -369,7 +307,6 @@ def main():
     print("Bot is starting...")
     print("Token:", TOKEN[:10] + "..." if len(TOKEN) > 10 else TOKEN)
     
-    # راه‌اندازی SQLite
     try:
         from database import init_db, migrate_from_json
         init_db()
@@ -379,28 +316,24 @@ def main():
     except Exception as ex:
         print("DB init error:", str(ex)[:100])
     
-    # حذف Webhook
     try:
         delete_webhook()
         print("Webhook deleted")
     except:
         pass
     
-    # اطلاعات ربات
     me = get_me()
     if me:
         import config
         config.BOT_USERNAME = me.get("username", "")
         print("Bot username:", config.BOT_USERNAME)
     
-    # پاک کردن پیام‌های قدیمی
     try:
         clear_old_updates()
         print("Old updates cleared")
     except Exception as ex:
         print("Clear error:", str(ex)[:100])
     
-    # حلقه اصلی
     offset = None
     last_followup = 0
     fail_count = 0
