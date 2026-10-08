@@ -28,13 +28,13 @@ def kb_main():
 
 
 def kb_categories():
-    return {"keyboard": [
-        [{"text": CAT_ELEC}],
-        [{"text": CAT_GAS}],
-        [{"text": CAT_COOL}],
-        [{"text": CAT_CAR}],
-        [{"text": BTN_BACK}]
-    ], "resize_keyboard": True, "one_time_keyboard": True}
+    from db import get_all_categories
+    cats = list(get_all_categories().keys())
+    keyboard = []
+    for c in cats:
+        keyboard.append([{"text": c}])
+    keyboard.append([{"text": BTN_BACK}])
+    return {"keyboard": keyboard, "resize_keyboard": True, "one_time_keyboard": True}
 
 
 def kb_yes_no():
