@@ -266,8 +266,7 @@ FUZZY_LOCATION_HINT = "📍 موقعیت مکانی شما ثبت شد.\n\nحا�
 # ==================== کیف پول ====================
 WALLET_TITLE = "💰 کیف پول شما\n\n"
 WALLET_BALANCE = "💵 موجودی: {balance} تومان\n"
-WALLET_FREE_PERIOD = "🎁 شما در دوره رایگان هستید (۲ ماه اول)\n"
-WALLET_FREE_LEFT = "⏳ {days} روز تا پایان دوره رایگان\n"
+WALLET_FREE_PERIOD = "🎁 شما در دوره رایگان هستید (۳۰ روز یا ۳۰ مشتری)\n"WALLET_FREE_LEFT = "⏳ {days} روز تا پایان دوره رایگان\n"
 WALLET_STATUS_FREE = "✅ وضعیت: رایگان"
 WALLET_STATUS_CHARGED = "✅ وضعیت: فعال"
 WALLET_STATUS_LOW = "⚠️ وضعیت: موجودی کم"
