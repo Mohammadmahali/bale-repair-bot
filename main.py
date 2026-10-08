@@ -27,9 +27,10 @@ def start_health_server():
         print("Health server error:", str(ex)[:100])
 
 
-threading.Thread(target=start_health_server, daemon=True).start() 
+threading.Thread(target=start_health_server, daemon=True).start()
 
-# ==================== شروع ربات ادمین در thread جداگانه ====================
+
+# ==================== شروع ربات ادمین در thread ====================
 def start_admin_bot_thread():
     try:
         from admin_bot import run_admin_bot
@@ -52,8 +53,6 @@ from texts import (
     WELCOME, BTN_REGISTER, BTN_SEARCH_SIMPLE, BTN_SEARCH_ADVANCED,
     BTN_EXPERTS_LIST, BTN_MY_PROFILE, BTN_FEEDBACK, BTN_SHOP_STATUS,
     USE_MENU, YES, NO, SHOP_ACTIVE, SHOP_CLOSED_TEMP, SHOP_CLOSED_PERM,
-    ADM_STATS, ADM_EXPERTS, ADM_PENDING, ADM_JOBS, ADM_REVENUE,
-    ADM_OPERATORS, ADM_CHANGE_PASS, ADM_EXIT,
     BTN_WALLET, BTN_CHARGE_WALLET,
     BTN_CHAT_EXPERT, BTN_CHAT_CUSTOMER, BTN_MY_CHATS,
     BTN_CHAT_BACK, BTN_CHAT_HIDE, BTN_CHAT_SHARE_PHONE, BTN_CHAT_REFRESH,
@@ -88,10 +87,6 @@ from handlers.shop_status import (
 )
 from handlers.feedback import handle_feedback as do_feedback
 
-
-# Admin
-
-
 # DB
 from db import (
     load_experts, save_experts, find_expert_by_id,
@@ -101,7 +96,6 @@ from db import (
 
 # ==================== State های سراسری ====================
 sessions = {}
-admin_sessions = set()
 search_modes = {}
 
 
@@ -119,11 +113,9 @@ def handle_message(msg):
         photos = msg.get("photo", [])
         if photos:
             message_id = msg.get("message_id")
-            # چت
             if user_id in sessions and sessions[user_id].get("step") == "chat_active":
                 handle_chat_photo(chat_id, user_id, message_id, sessions)
                 return
-            # کیف پول
             if user_id in sessions and sessions[user_id].get("step") == "wallet_receipt":
                 handle_receipt(chat_id, user_id, message_id, sessions)
                 return
@@ -131,7 +123,6 @@ def handle_message(msg):
     
     # ===== لوکیشن =====
     if location:
-        # لوکیشن چت
         if user_id in sessions and sessions[user_id].get("step") == "chat_active":
             chat_id_db = sessions[user_id]["data"].get("chat_id")
             role = sessions[user_id]["data"].get("role")
@@ -139,16 +130,13 @@ def handle_message(msg):
                 add_message(chat_id_db, user_id, role, "[لوکیشن]", 0, 0)
                 send_message(chat_id, "✅ لوکیشن ارسال شد.")
             return
-        # لوکیشن از پروفایل
         if user_id in sessions and sessions[user_id].get("step") == "profile_location":
             handle_profile_location(chat_id, user_id, location)
             sessions.pop(user_id, None)
             send_message(chat_id, PROFILE_LOCATION_SAVED, kb_main())
             return
-        # ثبت‌نام
         if reg_location(chat_id, user_id, location, sessions):
             return
-        # جستجو
         if search_location(chat_id, user_id, location, sessions):
             return
         return
@@ -157,7 +145,6 @@ def handle_message(msg):
     if text.startswith("/start"):
         handle_start(chat_id, user_id, text, sessions)
         return
-    
     
     # ===== اگه توی state خاصی هست =====
     if user_id in sessions:
@@ -205,8 +192,6 @@ def handle_message(msg):
             if continue_search(chat_id, user_id, text, sessions, search_modes):
                 return
         
-
-        
         # ادامه تعطیلی مغازه
         if step.startswith("shop_"):
             if continue_shop_close(chat_id, user_id, text, sessions):
@@ -252,20 +237,17 @@ def handle_message(msg):
     
     if text == SHOP_CLOSED_PERM:
         set_permanent_close(chat_id, user_id); return
-     
+    
     # ===== پیش‌فرض =====
     send_message(chat_id, USE_MENU, kb_main())
 
 
 # ==================== هندل Callback ====================
-   def handle_callback(cb):
-      cb_id = cb.get("id")
-      user_id = cb.get("from", {}).get("id")
-      chat_id = cb.get("message", {}).get("chat", {}).get("id")
-      data = cb.get("data", "")
-
-    
-
+def handle_callback(cb):
+    cb_id = cb.get("id")
+    user_id = cb.get("from", {}).get("id")
+    chat_id = cb.get("message", {}).get("chat", {}).get("id")
+    data = cb.get("data", "")
     
     # ===== callback شروع چت با تعمیرکار =====
     if data.startswith("chatstart:"):
@@ -427,7 +409,6 @@ def main():
         try:
             now = time.time()
             
-            # هر ۶۰ ثانیه: چک نظرسنجی و باز شدن مغازه‌ها
             if now - last_followup > 60:
                 try:
                     check_followups()
@@ -436,7 +417,6 @@ def main():
                     print("Followup error:", str(ex)[:100])
                 last_followup = now
             
-            # گرفتن پیام‌های جدید
             updates = get_updates(offset)
             fail_count = 0
             
