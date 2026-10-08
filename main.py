@@ -87,18 +87,10 @@ from handlers.shop_status import (
     set_permanent_close, set_shop_active, check_shop_reactivations,
 )
 from handlers.feedback import handle_feedback as do_feedback
-from handlers.admin_handlers import (
-    handle_admin_command, continue_admin, handle_admin_callback,
-    is_admin, is_authed_admin,
-)
+
 
 # Admin
-from admin import (
-    show_stats, show_pending_list, show_pending_detail,
-    show_experts_list, show_expert_detail, show_jobs, show_revenue,
-    show_operators, ask_change_password, ask_add_operator,
-    approve_wallet_txn, reject_wallet_txn,
-)
+
 
 # DB
 from db import (
@@ -166,32 +158,6 @@ def handle_message(msg):
         handle_start(chat_id, user_id, text, sessions)
         return
     
-    # ===== /admin =====
-    if text == "/admin":
-        handle_admin_command(chat_id, user_id, sessions, admin_sessions)
-        return
-    
-    # ===== اگه توی پنل ادمین هست =====
-    if is_authed_admin(user_id, admin_sessions):
-        if text == ADM_EXIT:
-            admin_sessions.discard(user_id)
-            sessions.pop(user_id, None)
-            send_message(chat_id, USE_MENU, kb_main())
-            return
-        if text == ADM_STATS:
-            show_stats(chat_id); return
-        if text == ADM_EXPERTS:
-            show_experts_list(chat_id); return
-        if text == ADM_PENDING:
-            show_pending_list(chat_id); return
-        if text == ADM_JOBS:
-            show_jobs(chat_id); return
-        if text == ADM_REVENUE:
-            show_revenue(chat_id); return
-        if text == ADM_OPERATORS:
-            show_operators(chat_id); return
-        if text == ADM_CHANGE_PASS:
-            ask_change_password(chat_id); return
     
     # ===== اگه توی state خاصی هست =====
     if user_id in sessions:
@@ -239,10 +205,7 @@ def handle_message(msg):
             if continue_search(chat_id, user_id, text, sessions, search_modes):
                 return
         
-        # ادامه ادمین
-        if step.startswith("adm_"):
-            if continue_admin(chat_id, user_id, text, sessions, admin_sessions):
-                return
+
         
         # ادامه تعطیلی مغازه
         if step.startswith("shop_"):
@@ -294,41 +257,15 @@ def handle_message(msg):
     send_message(chat_id, USE_MENU, kb_main())
 
 
-# ==================== هندل Callback ====================
-def handle_callback(cb):
-    cb_id = cb.get("id")
-    user_id = cb.get("from", {}).get("id")
-    chat_id = cb.get("message", {}).get("chat", {}).get("id")
-    data = cb.get("data", "")
+   # ==================== هندل Callback ====================
+   def handle_callback(cb):
+      cb_id = cb.get("id")
+      user_id = cb.get("from", {}).get("id")
+      chat_id = cb.get("message", {}).get("chat", {}).get("id")
+      data = cb.get("data", "")
+
     
-    # ===== callback ادمین =====
-    if data.startswith("adm:"):
-        if is_authed_admin(user_id, admin_sessions):
-            if handle_admin_callback(chat_id, user_id, data, admin_sessions):
-                answer_callback(cb_id)
-                return
-        answer_callback(cb_id, "دسترسی ندارید")
-        return
-    
-    # ===== callback تأیید شارژ کیف پول =====
-    if data.startswith("wadm:"):
-        if not is_authed_admin(user_id, admin_sessions):
-            answer_callback(cb_id, "دسترسی ندارید")
-            return
-        parts = data.split(":")
-        if len(parts) >= 3:
-            action = parts[1]
-            try:
-                txn_id = int(parts[2])
-            except:
-                answer_callback(cb_id, "خطا")
-                return
-            if action == "approve":
-                approve_wallet_txn(txn_id, chat_id, user_id)
-            elif action == "reject":
-                reject_wallet_txn(txn_id, chat_id, user_id)
-            answer_callback(cb_id)
-            return
+
     
     # ===== callback شروع چت با تعمیرکار =====
     if data.startswith("chatstart:"):
