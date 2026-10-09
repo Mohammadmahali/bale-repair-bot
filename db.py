@@ -81,7 +81,7 @@ def create_job(customer_id, customer_chat_id, expert, info):
     code = gen_tracking_code()
     while any(j.get("tracking_code") == code for j in jobs):
         code = gen_tracking_code()
-    
+
     now = int(time.time())
     job = {
         "id": "{}_{}".format(customer_id, now),
@@ -195,30 +195,6 @@ def get_all_tariffs():
     return db_sql.config_get("tariffs", {})
 
 
-# ==================== کاربران (برای تلگرام) ====================
-def load_users():
-    """خوندن همه کاربران (سازگاری با کد قبلی)"""
-    return {}
-
-
-def save_users(users):
-    return True
-
-
-def get_user_link(bale_user_id=None, telegram_user_id=None):
-    if bale_user_id:
-        return db_sql.users_get("bale_{}".format(bale_user_id))
-    if telegram_user_id:
-        return db_sql.users_get("tg_{}".format(telegram_user_id))
-    return None
-
-
-def link_users(bale_user_id, telegram_user_id):
-    db_sql.users_set("bale_{}".format(bale_user_id), {"telegram_id": telegram_user_id, "linked_at": int(time.time())})
-    db_sql.users_set("tg_{}".format(telegram_user_id), {"bale_id": bale_user_id, "linked_at": int(time.time())})
-    return True
-
-
 # ==================== گزارشات ====================
 def load_reports():
     return []
@@ -296,7 +272,6 @@ def save_admin_config(config):
     if "tariffs" in config:
         db_sql.config_set("tariffs", config["tariffs"])
     return True
-
 
 
 # ==================== کیف پول ====================
@@ -377,10 +352,10 @@ def is_expert_in_free_period(expert):
     now = int(time.time())
     days_passed = (now - created_at) / 86400
     customers_used = expert.get("referral_count", 0)
-    
+
     time_done = days_passed >= FREE_DAYS
     customers_done = customers_used >= FREE_CUSTOMERS
-    
+
     # خارج از رایگان فقط وقتی هر دو تموم شده باشن
     if time_done and customers_done:
         return False
@@ -487,7 +462,7 @@ DEFAULT_CATEGORIES = {
         "برق خودرو", "باتری‌ساز", "آپاراتی (پنچرگیری)",
         "تعویض روغن، فیلتر و سرویس", "مکانیکی (تعمیرات موتور)",
         "گیربکس و کلاچ", "کمک‌فنر و فنر", "اگزوز", "کولر و بخاری خودرو",
-        "دیاک و عیب‌یابی", "صافکاری", "نقاشی خودرو", "سایر خدمات خودرو",
+        "دیاگ و عیب‌یابی", "صافکاری", "نقاشی خودرو", "سایر خدمات خودرو",
     ],
 }
 
