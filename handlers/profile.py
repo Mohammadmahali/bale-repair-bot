@@ -15,10 +15,14 @@ from texts import (
     CUSTOMER_PROFILE_TITLE, CUSTOMER_NO_ACTIVITY, CUSTOMER_SUMMARY,
     CUSTOMER_TOTAL, CUSTOMER_LAST, CUSTOMER_ITEM_HEADER,
     CUSTOMER_HISTORY_FOOTER,
+    RATING_BY_SPEC, RATING_SPEC_LINE, RATING_NO_SPEC,
 )
 from keyboards import kb_main, kb_share_link, kb_profile, kb_profile_location, kb_share_link_with_qr
 from api import send_message
-from db import find_expert_by_id, is_shop_open, get_customer_history
+from db import (
+    find_expert_by_id, is_shop_open, get_customer_history,
+    get_all_spec_ratings,
+)
 from utils import gen_expert_code
 from db import load_experts, save_experts
 
@@ -88,6 +92,24 @@ def rating_breakdown(expert):
     return "\n".join(lines)
 
 
+# ==================== امتیاز تفکیک‌شده ====================
+def rating_by_spec_section(expert):
+    """بخش امتیاز به تفکیک تخصص برای پروفایل"""
+    spec_ratings = get_all_spec_ratings(expert)
+
+    if not spec_ratings:
+        return "\n" + RATING_BY_SPEC + RATING_NO_SPEC + "\n"
+
+    txt = "\n" + RATING_BY_SPEC
+    for spec, data in spec_ratings.items():
+        txt += RATING_SPEC_LINE.format(
+            spec=spec,
+            avg="{:.1f}".format(data["avg"]),
+            count=data["count"]
+        )
+    return txt
+
+
 # ==================== وضعیت مغازه ====================
 def get_shop_label(expert):
     if not expert.get("active", True):
@@ -109,10 +131,9 @@ def get_shop_label(expert):
 def show_profile(chat_id, user_id):
     expert = find_expert_by_id(user_id)
     if not expert:
-        # کاربر مشتری است → نمایش تاریخچه
         show_customer_profile(chat_id, user_id)
         return
-    
+
     # پروفایل تعمیرکار
     txt = MY_PROFILE
     txt += LBL_NAME + " " + expert.get("name", "?") + "\n"
@@ -124,17 +145,21 @@ def show_profile(chat_id, user_id):
     txt += "⏱ سرعت پاسخگویی: " + RESPONSE_TIMES[int(expert.get("response_speed", 0))] + "\n"
     txt += "🔧 زمان تعمیر: " + REPAIR_TIMES[int(expert.get("repair_time", 0))] + "\n"
     txt += SHOP_STATUS_TITLE + get_shop_label(expert) + "\n\n"
-    
+
     if expert.get("status", "approved") == "pending":
         txt += "⏳ در انتظار تأیید مدیر\n\n"
-    
+
     txt += "⭐ {:.1f}/5".format(calc_avg_rating(expert))
     rv = count_reviews(expert)
     if rv > 0:
         txt += " (" + str(rv) + " نظر)"
     txt += "\n" + LBL_REFERRAL + str(expert.get("referral_count", 0)) + "\n\n"
-    txt += rating_breakdown(expert) + "\n\n"
-    txt += "📊 مراحل نظرسنجی:\n"
+    txt += rating_breakdown(expert) + "\n"
+
+    # بخش جدید: امتیاز به تفکیک تخصص
+    txt += rating_by_spec_section(expert)
+
+    txt += "\n📊 مراحل نظرسنجی:\n"
     for st in [0, 1, 2]:
         a, c = calc_stage_stats(expert, st)
         nm = ["اولیه", "یک‌ماه", "شش‌ماه"][st]
@@ -142,14 +167,14 @@ def show_profile(chat_id, user_id):
             txt += "• " + nm + ": هنوز نیست\n"
         else:
             txt += "• " + nm + ": {:.1f} ({} نظر)\n".format(a, c)
-    
+
     send_message(chat_id, txt, kb_main())
-    
+
     _show_expert_link(chat_id, user_id, expert)
-    
+
     if not expert.get("lat") or not expert.get("lng"):
         send_message(chat_id, LOCATION_WARNING, kb_profile_location())
-    
+
     send_message(chat_id, "👤 منوی پروفایل:", kb_profile())
 
 
@@ -157,16 +182,15 @@ def show_profile(chat_id, user_id):
 def show_customer_profile(chat_id, user_id):
     """نمایش تاریخچه درخواست‌های مشتری"""
     jobs = get_customer_history(user_id, 10)
-    
+
     if not jobs:
         send_message(chat_id, CUSTOMER_NO_ACTIVITY, kb_main())
         return
-    
+
     txt = CUSTOMER_PROFILE_TITLE
     txt += CUSTOMER_SUMMARY
     txt += CUSTOMER_TOTAL + str(len(jobs)) + "\n"
-    
-    # آخرین درخواست
+
     last_time = jobs[0].get("created_at", 0)
     if last_time:
         days_ago = int((time.time() - last_time) / 86400)
@@ -177,10 +201,9 @@ def show_customer_profile(chat_id, user_id):
         else:
             last_str = "{} روز پیش".format(days_ago)
         txt += CUSTOMER_LAST + last_str + "\n"
-    
+
     txt += "\n"
-    
-    # لیست درخواست‌ها
+
     for j in jobs[:10]:
         info = j.get("info", {})
         created = j.get("created_at", 0)
@@ -191,7 +214,7 @@ def show_customer_profile(chat_id, user_id):
             date_str = "دیروز"
         else:
             date_str = "{} روز پیش".format(days_ago)
-        
+
         txt += CUSTOMER_ITEM_HEADER
         txt += "📅 " + date_str + "\n"
         if info.get("sub"):
@@ -200,9 +223,9 @@ def show_customer_profile(chat_id, user_id):
         if info.get("phone"):
             txt += "📞 " + info["phone"] + "\n"
         txt += "🎫 " + j.get("tracking_code", "?") + "\n\n"
-    
+
     txt += CUSTOMER_HISTORY_FOOTER
-    
+
     send_message(chat_id, txt, kb_main())
 
 
@@ -217,7 +240,7 @@ def _show_expert_link(chat_id, user_id, expert):
                 x["expert_code"] = code
                 break
         save_experts(experts)
-    
+
     link = _build_expert_link(code)
     txt = LBL_CODE + code + "\n\n" + LBL_LINK + link + SHARE_HINT
     send_message(chat_id, txt, kb_share_link_with_qr(link))
