@@ -10,7 +10,6 @@ SQLITE_FILE = "bot.db"
 DB_FILE = "experts.json"
 JOBS_FILE = "jobs.json"
 CONFIG_FILE = "bot_config.json"
-USERS_FILE = "users.json"
 
 # ==================== تنظیمات ادمین ====================
 DEFAULT_PASSWORD = "1234"
@@ -33,7 +32,6 @@ ENABLE_RATING_COMMENTS = False
 ENABLE_LEVEL2_CONSULT = False
 ENABLE_REPORTS = False
 ENABLE_QA = False
-ENABLE_TELEGRAM = False
 
 # ==================== تنظیمات ====================
 FUZZY_DISTANCE = 3
