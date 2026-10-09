@@ -15,6 +15,7 @@ from texts import (
     BTN_EDIT, BTN_EDIT_CATEGORIES, BTN_EDIT_TARIFFS,
     BTN_EDIT_FEEDBACK, BTN_EDIT_CARD, BTN_SHOW_QR,
     BTN_BULK_TARIFF,
+    COMMENT_SKIP_BTN, BTN_COMMENT_WITH_NAME, BTN_COMMENT_ANON,
 )
 
 
@@ -250,24 +251,27 @@ def kb_bulk_confirm():
     ]]}
 
 
+# ==================== کیبورد امتیاز فوری ====================
 def kb_rate_expert(expert_id):
-    """کیبورد دکمه امتیاز فوری بعد از انتخاب تعمیرکار"""
+    """دکمه امتیاز فوری بعد از انتخاب تعمیرکار"""
     return {"inline_keyboard": [[
         {"text": "⭐ امتیاز به تعمیرکار",
          "callback_data": "rate:" + str(expert_id)}
     ]]}
 
+
 # ==================== کیبورد نظرات متنی ====================
-def kb_comment_ask():
-    """کیبورد مرحله نظرات متنی (رد کردن یا نوشتن)"""
-    return {"keyboard": [
-        [{"text": COMMENT_SKIP_BTN}]
-    ], "resize_keyboard": True, "one_time_keyboard": True}
+def kb_comment_choice():
+    """انتخاب: نوشتن نظر یا رد کردن"""
+    return {"inline_keyboard": [[
+        {"text": "✍️ نوشتن نظر", "callback_data": "comment:yes"},
+        {"text": COMMENT_SKIP_BTN, "callback_data": "comment:skip"}
+    ]]}
 
 
 def kb_comment_name_choice():
-    """کیبورد انتخاب با نام یا ناشناس"""
+    """انتخاب: با نام یا ناشناس"""
     return {"inline_keyboard": [[
-        {"text": BTN_COMMENT_WITH_NAME, "callback_data": "comment:name"},
+        {"text": BTN_COMMENT_WITH_NAME, "callback_data": "comment:named"},
         {"text": BTN_COMMENT_ANON, "callback_data": "comment:anon"}
     ]]}
