@@ -212,6 +212,7 @@ def kb_edit_menu():
     return {"keyboard": [
         [{"text": BTN_EDIT_CATEGORIES}],
         [{"text": BTN_EDIT_TARIFFS}],
+        [{"text": BTN_BULK_TARIFF}],
         [{"text": BTN_EDIT_FEEDBACK}],
         [{"text": BTN_EDIT_CARD}],
         [{"text": BTN_BACK}]
