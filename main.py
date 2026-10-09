@@ -61,7 +61,6 @@ from texts import (
     BTN_BACK,
     BTN_DEVICE_LOG, BTN_ADD_DEFECT, BTN_VIEW_DEVICE_LOGS,
     BTN_MY_DEVICE_LOGS,
-    SEC_BLOCKED_PERMANENT, SEC_RATE_LIMIT,
 )
 
 # Handlers
@@ -91,9 +90,6 @@ from handlers.device_log import (
     show_logs_for_job, show_my_device_logs,
     start_edit_log, continue_edit_log, do_delete_log,
 )
-from handlers.security import (
-    check_user_access, check_suspicious_text, check_rate_limit,
-)
 from handlers.retention import check_retention
 
 # DB
@@ -116,19 +112,6 @@ def handle_message(msg):
     location = msg.get("location")
 
     print(">>>", user_id, text[:30].encode("ascii", "replace").decode())
-
-    # ===== امنیت: چک مسدود بودن =====
-    if not check_user_access(chat_id, user_id):
-        return
-
-    # ===== امنیت: Rate limit =====
-    if not check_rate_limit(chat_id, user_id, max_count=60, window_seconds=60):
-        send_message(chat_id, SEC_RATE_LIMIT)
-        return
-
-    # ===== امنیت: متن مشکوک =====
-    if text and not check_suspicious_text(chat_id, user_id, text):
-        return
 
     # ===== عکس (رسید کیف پول) =====
     if "photo" in msg:
@@ -279,7 +262,6 @@ def handle_message(msg):
         show_my_device_logs(chat_id, user_id, sessions); return
 
     if text == BTN_VIEW_DEVICE_LOGS:
-        # معادل BTN_MY_DEVICE_LOGS
         show_my_device_logs(chat_id, user_id, sessions); return
 
     # ===== پیش‌فرض =====
@@ -292,11 +274,6 @@ def handle_callback(cb):
     user_id = cb.get("from", {}).get("id")
     chat_id = cb.get("message", {}).get("chat", {}).get("id")
     data = cb.get("data", "")
-
-    # ===== امنیت: چک مسدود =====
-    if not check_user_access(chat_id, user_id):
-        answer_callback(cb_id)
-        return
 
     # ===== ثبت لوکیشن =====
     if data == "profile:set_location":
@@ -331,7 +308,7 @@ def handle_callback(cb):
         answer_callback(cb_id, "خطا")
         return
 
-    # ===== امتیازدهی (ستاره‌ها) =====
+    # ===== امتیازدهی =====
     if data.startswith("crit:"):
         parts = data.split(":")
         if len(parts) == 3:
@@ -465,7 +442,6 @@ def main():
         try:
             now = time.time()
 
-            # هر ۶۰ ثانیه: نظرسنجی + مغازه
             if now - last_followup > 60:
                 try:
                     check_followups()
@@ -474,7 +450,6 @@ def main():
                     print("Followup error:", str(ex)[:100])
                 last_followup = now
 
-            # هر ۶۰ ثانیه چک: پاکسازی ۶ ماهه (خودش ۲۴ ساعته چک می‌کنه)
             if now - last_retention > 60:
                 try:
                     check_retention()
