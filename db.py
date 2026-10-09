@@ -95,6 +95,7 @@ def create_job(customer_id, customer_chat_id, expert, info):
         "next_at": now + (30 * 86400),
         "sent_for_stage": 0,
         "info": info,
+        "rated_stages": [],
     }
     db_sql.upsert_job(job)
     inc_referral_count(expert["user_id"])
@@ -126,6 +127,31 @@ def advance_job_stage(customer_id, expert_id):
 def update_job_field(job_id, field, value):
     db_sql.update_job(job_id, field, value)
     return True
+
+
+def find_job_by_code(tracking_code):
+    """پیدا کردن پروژه با کد پیگیری"""
+    return db_sql.find_job_by_code(tracking_code)
+
+
+def mark_job_rated(customer_id, expert_id, stage):
+    """ثبت اینکه این مشتری برای این مرحله امتیاز داده"""
+    j = db_sql.find_job(customer_id, expert_id)
+    if not j:
+        return False
+    rated = j.get("rated_stages", [])
+    if stage not in rated:
+        rated.append(stage)
+        db_sql.update_job(j["id"], "rated_stages", rated)
+    return True
+
+
+def is_job_rated(customer_id, expert_id, stage):
+    """آیا مشتری برای این stage امتیاز داده؟"""
+    j = db_sql.find_job(customer_id, expert_id)
+    if not j:
+        return False
+    return stage in j.get("rated_stages", [])
 
 
 # ==================== تنظیمات ادمین ====================
@@ -356,7 +382,6 @@ def is_expert_in_free_period(expert):
     time_done = days_passed >= FREE_DAYS
     customers_done = customers_used >= FREE_CUSTOMERS
 
-    # خارج از رایگان فقط وقتی هر دو تموم شده باشن
     if time_done and customers_done:
         return False
     return True
@@ -546,14 +571,11 @@ def get_sub_by_index(cat_label, idx):
 def get_sub_tariff(sub_specialty):
     """گرفتن تعرفه یه زیرتخصص"""
     from config import SUB_TARIFFS
-    # اول از config کاربر چک کن
     tariffs = db_sql.config_get("sub_tariffs", {})
     if sub_specialty in tariffs:
         return tariffs[sub_specialty]
-    # بعد از SUB_TARIFFS پیش‌فرض
     if sub_specialty in SUB_TARIFFS:
         return SUB_TARIFFS[sub_specialty]
-    # اگه پیدا نشد، 50000
     return 50000
 
 
@@ -572,6 +594,8 @@ def get_all_sub_tariffs():
     result = dict(SUB_TARIFFS)
     result.update(user_tariffs)
     return result
+
+
 # ==================== امتیازدهی تفکیک‌شده بر تخصص ====================
 def add_spec_rating(expert_id, specialty, stage, criteria_key, stars):
     """ثبت امتیاز برای یه تخصص خاص (داخل ratings_by_stage.by_spec)"""
@@ -592,10 +616,7 @@ def add_spec_rating(expert_id, specialty, stage, criteria_key, stars):
 
 
 def calc_spec_rating(expert, specialty):
-    """
-    محاسبه میانگین امتیاز یه تخصص خاص
-    return: float یا None (اگه نظری برای این تخصص نباشه)
-    """
+    """محاسبه میانگین امتیاز یه تخصص خاص"""
     from texts import CRITERIA
 
     by_spec = expert.get("ratings_by_stage", {}).get("by_spec", {})
@@ -640,10 +661,7 @@ def get_spec_reviews_count(expert, specialty):
 
 
 def get_all_spec_ratings(expert):
-    """
-    گرفتن همه امتیازهای تفکیک‌شده بر اساس تخصص
-    return: {spec_name: {"avg": float, "count": int}, ...}
-    """
+    """گرفتن همه امتیازهای تفکیک‌شده بر اساس تخصص"""
     by_spec = expert.get("ratings_by_stage", {}).get("by_spec", {})
     result = {}
     for spec in by_spec.keys():
@@ -651,16 +669,12 @@ def get_all_spec_ratings(expert):
         cnt = get_spec_reviews_count(expert, spec)
         if avg is not None and cnt > 0:
             result[spec] = {"avg": avg, "count": cnt}
-    # مرتب‌سازی بر اساس تعداد نظرات (نزولی)
     result = dict(sorted(result.items(), key=lambda x: x[1]["count"], reverse=True))
     return result
 
 
 def get_spec_rating_for_search(expert, specialty, fallback_to_overall=True):
-    """
-    امتیاز مخصوص یه تخصص برای استفاده توی رتبه‌بندی جستجو
-    اگه امتیاز مخصوص نبود و fallback فعال باشه، امتیاز کلی رو برمی‌گردونه
-    """
+    """امتیاز مخصوص یه تخصص برای استفاده توی رتبه‌بندی جستجو"""
     spec_avg = calc_spec_rating(expert, specialty)
     if spec_avg is not None:
         return spec_avg
@@ -687,3 +701,33 @@ def _calc_overall_rating(expert):
     if count == 0:
         return 5.0
     return total / count
+
+
+# ==================== نظرات متنی ====================
+def add_comment(expert_id, customer_id, specialty, stage, stars, comment,
+                author_name="", is_anonymous=0):
+    """ذخیره یه نظر متنی"""
+    return db_sql.add_comment(
+        expert_id, customer_id, specialty, stage, stars, comment,
+        author_name, is_anonymous
+    )
+
+
+def get_expert_comments(expert_id, limit=20):
+    """گرفتن نظرات یه تعمیرکار"""
+    return db_sql.get_expert_comments(expert_id, limit)
+
+
+def get_expert_spec_comments(expert_id, specialty, limit=10):
+    """نظرات یه تعمیرکار برای یه تخصص خاص"""
+    return db_sql.get_expert_spec_comments(expert_id, specialty, limit)
+
+
+def get_comment_count(expert_id):
+    """تعداد نظرات یه تعمیرکار"""
+    return db_sql.get_comment_count(expert_id)
+
+
+def has_rated(expert_id, customer_id, stage):
+    """آیا این مشتری قبلاً به این تعمیرکار امتیاز داده (برای این مرحله)؟"""
+    return db_sql.has_rated(expert_id, customer_id, stage)
