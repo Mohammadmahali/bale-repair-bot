@@ -14,8 +14,12 @@ from texts import (
     BTN_NAV_NESHAN, BTN_NAV_GOOGLE,
     BTN_EDIT, BTN_EDIT_CATEGORIES, BTN_EDIT_TARIFFS,
     BTN_EDIT_FEEDBACK, BTN_EDIT_CARD, BTN_SHOW_QR,
-    BTN_BULK_TARIFF,
+    BTN_BULK_TARIFF, BTN_EDIT_CITIES,
     COMMENT_SKIP_BTN, BTN_COMMENT_WITH_NAME, BTN_COMMENT_ANON,
+    BTN_DEVICE_LOG, BTN_ADD_DEFECT, BTN_VIEW_DEVICE_LOGS,
+    BTN_MY_DEVICE_LOGS, BTN_DEVICE_LOG_VIEW, BTN_DEVICE_LOG_EDIT,
+    ADM_SECURITY, ADM_SEC_EVENTS, ADM_SEC_BLOCKED, ADM_SEC_BACK,
+    SEC_UNBLOCK, EDIT_CITIES_RESET,
 )
 
 
@@ -82,6 +86,7 @@ def kb_profile():
     return {"keyboard": [
         [{"text": BTN_WALLET}],
         [{"text": BTN_SHOP_STATUS}],
+        [{"text": BTN_MY_DEVICE_LOGS}],
         [{"text": BTN_BACK}]
     ], "resize_keyboard": True}
 
@@ -101,6 +106,7 @@ def kb_admin():
         [{"text": ADM_JOBS}],
         [{"text": ADM_REVENUE}],
         [{"text": ADM_OPERATORS}],
+        [{"text": ADM_SECURITY}],
         [{"text": BTN_EDIT}],
         [{"text": ADM_CHANGE_PASS}],
         [{"text": ADM_EXIT}]
@@ -125,7 +131,6 @@ def kb_share_link(url):
 
 
 def kb_share_link_with_qr(url):
-    """کیبورد اشتراک‌گذاری لینک + QR"""
     qr_url = "https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=" + url
     return {"inline_keyboard": [
         [{"text": BTN_SHOW_QR, "url": qr_url}],
@@ -208,12 +213,13 @@ def kb_profile_location_send():
     ], "resize_keyboard": True, "one_time_keyboard": True}
 
 
-# ==================== کیبورد ویرایش (ربات ادمین) ====================
+# ==================== کیبورد ویرایش ====================
 def kb_edit_menu():
     return {"keyboard": [
         [{"text": BTN_EDIT_CATEGORIES}],
         [{"text": BTN_EDIT_TARIFFS}],
         [{"text": BTN_BULK_TARIFF}],
+        [{"text": BTN_EDIT_CITIES}],
         [{"text": BTN_EDIT_FEEDBACK}],
         [{"text": BTN_EDIT_CARD}],
         [{"text": BTN_BACK}]
@@ -234,9 +240,7 @@ def kb_tariffs_list():
     ]}
 
 
-# ==================== کیبورد ویرایش کلی تعرفه ====================
 def kb_tariffs_menu():
-    """منوی فرعی تعرفه‌ها (شامل ویرایش کلی)"""
     return {"keyboard": [
         [{"text": BTN_BULK_TARIFF}],
         [{"text": BTN_BACK}]
@@ -244,25 +248,21 @@ def kb_tariffs_menu():
 
 
 def kb_bulk_confirm():
-    """دکمه‌های تأیید/انصراف ویرایش کلی"""
     return {"inline_keyboard": [[
         {"text": "✅ بله، اعمال کن", "callback_data": "bulk:confirm"},
         {"text": "❌ انصراف", "callback_data": "bulk:cancel"}
     ]]}
 
 
-# ==================== کیبورد امتیاز فوری ====================
+# ==================== کیبورد امتیاز ====================
 def kb_rate_expert(expert_id):
-    """دکمه امتیاز فوری بعد از انتخاب تعمیرکار"""
     return {"inline_keyboard": [[
         {"text": "⭐ امتیاز به تعمیرکار",
          "callback_data": "rate:" + str(expert_id)}
     ]]}
 
 
-# ==================== کیبورد نظرات متنی ====================
 def kb_comment_choice():
-    """انتخاب: نوشتن نظر یا رد کردن"""
     return {"inline_keyboard": [[
         {"text": "✍️ نوشتن نظر", "callback_data": "comment:yes"},
         {"text": COMMENT_SKIP_BTN, "callback_data": "comment:skip"}
@@ -270,8 +270,105 @@ def kb_comment_choice():
 
 
 def kb_comment_name_choice():
-    """انتخاب: با نام یا ناشناس"""
     return {"inline_keyboard": [[
         {"text": BTN_COMMENT_WITH_NAME, "callback_data": "comment:named"},
         {"text": BTN_COMMENT_ANON, "callback_data": "comment:anon"}
+    ]]}
+
+
+# ==================== کیبورد مدیریت شهرها ====================
+def kb_edit_cities_menu():
+    return {"keyboard": [
+        [{"text": "➕ افزودن شهر"}],
+        [{"text": "🗑 حذف شهر"}],
+        [{"text": EDIT_CITIES_RESET}],
+        [{"text": BTN_BACK}]
+    ], "resize_keyboard": True}
+
+
+def kb_cities_delete_list(page=0, per_page=20):
+    from db import get_all_cities
+    from texts import BTN_CITIES_NEXT, BTN_CITIES_PREV
+
+    cities = get_all_cities()
+    total = len(cities)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+
+    if page < 0:
+        page = 0
+    if page >= total_pages:
+        page = total_pages - 1
+
+    start = page * per_page
+    end = start + per_page
+    page_cities = cities[start:end]
+
+    kb = []
+    for city in page_cities:
+        kb.append([{"text": "🗑 " + city, "callback_data": "adm:citydel:" + city}])
+
+    nav = []
+    if page > 0:
+        nav.append({"text": BTN_CITIES_PREV, "callback_data": "adm:citypage:" + str(page - 1)})
+    if page < total_pages - 1:
+        nav.append({"text": BTN_CITIES_NEXT, "callback_data": "adm:citypage:" + str(page + 1)})
+    if nav:
+        kb.append(nav)
+
+    kb.append([{"text": BTN_BACK, "callback_data": "adm:backedit"}])
+
+    return {"inline_keyboard": kb}
+
+
+def kb_cities_reset_confirm():
+    return {"inline_keyboard": [[
+        {"text": "✅ بله، بازگردان", "callback_data": "adm:cityreset:yes"},
+        {"text": "❌ انصراف", "callback_data": "adm:cityreset:no"}
+    ]]}
+
+
+# ==================== کیبورد لاگ عیوب ====================
+def kb_device_log_menu():
+    return {"keyboard": [
+        [{"text": BTN_ADD_DEFECT}],
+        [{"text": BTN_VIEW_DEVICE_LOGS}],
+        [{"text": BTN_BACK}]
+    ], "resize_keyboard": True}
+
+
+def kb_device_log_list():
+    return {"keyboard": [
+        [{"text": BTN_MY_DEVICE_LOGS}],
+        [{"text": BTN_BACK}]
+    ], "resize_keyboard": True}
+
+
+def kb_device_log_item(log_id, can_edit=False):
+    kb = {"inline_keyboard": []}
+    if can_edit:
+        kb["inline_keyboard"].append([
+            {"text": BTN_DEVICE_LOG_EDIT, "callback_data": "devlog:edit:" + str(log_id)}
+        ])
+    return kb if kb["inline_keyboard"] else None
+
+
+def kb_device_log_confirm_delete(log_id):
+    return {"inline_keyboard": [[
+        {"text": "🗑 حذف", "callback_data": "devlog:del:" + str(log_id)},
+        {"text": "❌ انصراف", "callback_data": "devlog:cancel"}
+    ]]}
+
+
+# ==================== کیبورد امنیت (ادمین) ====================
+def kb_security_menu():
+    return {"keyboard": [
+        [{"text": ADM_SEC_EVENTS}],
+        [{"text": ADM_SEC_BLOCKED}],
+        [{"text": ADM_SEC_BACK}]
+    ], "resize_keyboard": True}
+
+
+def kb_blocked_user(user_id):
+    return {"inline_keyboard": [[
+        {"text": SEC_UNBLOCK, "callback_data": "adm:unblock:" + str(user_id)}
     ]]}
