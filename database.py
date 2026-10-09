@@ -2,7 +2,7 @@
 import sqlite3
 import json
 import threading
-from config import SQLITE_FILE, DB_FILE, JOBS_FILE, CONFIG_FILE, USERS_FILE
+from config import SQLITE_FILE, DB_FILE, JOBS_FILE, CONFIG_FILE
 
 _lock = threading.Lock()
 
@@ -18,7 +18,7 @@ def init_db():
     with _lock:
         conn = get_conn()
         c = conn.cursor()
-        
+
         # جدول تعمیرکاران
         c.execute("""
             CREATE TABLE IF NOT EXISTS experts (
@@ -49,7 +49,7 @@ def init_db():
                 created_at INTEGER DEFAULT 0
             )
         """)
-        
+
         # جدول پروژه‌ها
         c.execute("""
             CREATE TABLE IF NOT EXISTS jobs (
@@ -66,7 +66,7 @@ def init_db():
                 info TEXT DEFAULT '{}'
             )
         """)
-        
+
         # جدول تنظیمات (key-value)
         c.execute("""
             CREATE TABLE IF NOT EXISTS config (
@@ -89,9 +89,9 @@ def init_db():
                 reviewed_by INTEGER,
                 reject_reason TEXT DEFAULT ''
             )
-        """) 
+        """)
 
-                # جدول چت‌ها
+        # جدول چت‌ها
         c.execute("""
             CREATE TABLE IF NOT EXISTS chats (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,7 +108,7 @@ def init_db():
                 customer_unread INTEGER DEFAULT 0
             )
         """)
-        
+
         # جدول پیام‌ها
         c.execute("""
             CREATE TABLE IF NOT EXISTS messages (
@@ -122,31 +122,8 @@ def init_db():
                 created_at INTEGER
             )
         """)
-        
-        # جدول کاربران (برای اتصال بله-تلگرام)
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )
-        """)
-        
+
         conn.commit()
-        # جدول تراکنش‌های کیف پول
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS wallet_transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                expert_id INTEGER,
-                amount INTEGER,
-                type TEXT,
-                status TEXT DEFAULT 'pending',
-                receipt_message_id INTEGER,
-                created_at INTEGER,
-                reviewed_at INTEGER,
-                reviewed_by INTEGER,
-                reject_reason TEXT DEFAULT ''
-            )
-        """)
         conn.close()
 
 
@@ -250,7 +227,7 @@ def update_expert(user_id, field, value):
         value = json.dumps(value, ensure_ascii=False)
     elif field in ["works_on_site", "active", "is_premium"]:
         value = 1 if value else 0
-    
+
     with _lock:
         conn = get_conn()
         c = conn.cursor()
@@ -381,44 +358,16 @@ def config_set(key, value):
         conn.close()
 
 
-# ==================== کاربران (برای تلگرام) ====================
-def users_get(key):
-    with _lock:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute("SELECT value FROM users WHERE key = ?", (key,))
-        row = c.fetchone()
-        conn.close()
-        if row:
-            try:
-                return json.loads(row["value"])
-            except:
-                return None
-        return None
-
-
-def users_set(key, value):
-    with _lock:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute("INSERT OR REPLACE INTO users (key, value) VALUES (?, ?)", (key, json.dumps(value, ensure_ascii=False)))
-        conn.commit()
-        conn.close()
-
-
 # ==================== مهاجرت از JSON ====================
 def migrate_from_json():
     """مهاجرت از فایل‌های JSON قدیمی به SQLite (فقط یه بار)"""
     import os
-    
-    experts_migrated = False
-    jobs_migrated = False
-    
+
     # چک کن دیتابیس خالی هست
     existing_experts = load_all_experts()
     if existing_experts:
         return  # قبلاً مهاجرت شده
-    
+
     # مهاجرت تعمیرکاران
     if os.path.exists(DB_FILE):
         try:
@@ -426,11 +375,10 @@ def migrate_from_json():
                 experts = json.load(f)
                 if experts:
                     save_all_experts(experts)
-                    experts_migrated = True
                     print("Migrated {} experts from JSON".format(len(experts)))
         except Exception as e:
             print("Expert migration error:", str(e)[:100])
-    
+
     # مهاجرت پروژه‌ها
     if os.path.exists(JOBS_FILE):
         try:
@@ -438,11 +386,10 @@ def migrate_from_json():
                 jobs = json.load(f)
                 if jobs:
                     save_all_jobs(jobs)
-                    jobs_migrated = True
                     print("Migrated {} jobs from JSON".format(len(jobs)))
         except Exception as e:
             print("Job migration error:", str(e)[:100])
-    
+
     # مهاجرت تنظیمات
     if os.path.exists(CONFIG_FILE):
         try:
@@ -459,6 +406,7 @@ def migrate_from_json():
                 print("Migrated config from JSON")
         except Exception as e:
             print("Config migration error:", str(e)[:100])
+
 
 # ==================== کیف پول ====================
 def create_wallet_request(expert_id, amount, receipt_message_id):
@@ -543,7 +491,7 @@ def create_chat(expert_id, customer_id, job_code=""):
             conn.commit()
             conn.close()
             return chat_id
-        
+
         now = int(_time.time())
         c.execute("""
             INSERT INTO chats
@@ -648,7 +596,7 @@ def get_expert_chats(expert_id, filter_type="all"):
     with _lock:
         conn = get_conn()
         c = conn.cursor()
-        
+
         if filter_type == "unread":
             c.execute("""
                 SELECT * FROM chats
@@ -682,7 +630,7 @@ def get_customer_chats(customer_id, filter_type="all"):
     with _lock:
         conn = get_conn()
         c = conn.cursor()
-        
+
         if filter_type == "unread":
             c.execute("""
                 SELECT * FROM chats
