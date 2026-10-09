@@ -256,3 +256,18 @@ def kb_rate_expert(expert_id):
         {"text": "⭐ امتیاز به تعمیرکار",
          "callback_data": "rate:" + str(expert_id)}
     ]]}
+
+# ==================== کیبورد نظرات متنی ====================
+def kb_comment_ask():
+    """کیبورد مرحله نظرات متنی (رد کردن یا نوشتن)"""
+    return {"keyboard": [
+        [{"text": COMMENT_SKIP_BTN}]
+    ], "resize_keyboard": True, "one_time_keyboard": True}
+
+
+def kb_comment_name_choice():
+    """کیبورد انتخاب با نام یا ناشناس"""
+    return {"inline_keyboard": [[
+        {"text": BTN_COMMENT_WITH_NAME, "callback_data": "comment:name"},
+        {"text": BTN_COMMENT_ANON, "callback_data": "comment:anon"}
+    ]]}
