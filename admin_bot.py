@@ -1,6 +1,5 @@
 # ==================== ربات ادمین (جدا) ====================
 import time
-import threading
 from config import SUPER_ADMIN
 from api_admin import (
     admin_send_message, admin_answer_callback,
@@ -112,7 +111,10 @@ def handle_admin_message(msg):
     user_id = msg.get("from", {}).get("id")
     text = msg.get("text", "")
 
-    print("[ADMIN]", user_id, text[:30].encode("ascii", "replace").decode())
+    try:
+        print("[ADMIN]", user_id, text[:30].encode("ascii", "replace").decode())
+    except:
+        pass
 
     if text == "/start":
         handle_admin_start(chat_id, user_id)
@@ -185,6 +187,7 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, USE_MENU)
             return
 
+        # ===== تنظیم رمز اول =====
         if step == "adm_set_pass":
             if len(text) < 4:
                 admin_send_message(chat_id, ADM_PASS_SHORT, kb_back())
@@ -207,6 +210,7 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, ADM_TITLE, kb_admin())
             return
 
+        # ===== ورود با رمز (بدون قفل) =====
         if step == "adm_password":
             pw = get_user_password(user_id)
             if text == pw:
@@ -217,6 +221,7 @@ def handle_admin_message(msg):
                 admin_send_message(chat_id, ADM_WRONG_PASS, kb_back())
             return
 
+        # ===== تغییر رمز =====
         if step == "adm_change_new":
             if len(text) < 4:
                 admin_send_message(chat_id, ADM_PASS_SHORT, kb_back())
@@ -237,6 +242,7 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, ADM_PASS_SET_OK, kb_admin())
             return
 
+        # ===== افزودن اپراتور =====
         if step == "adm_add_op":
             try:
                 new_id = int(text.strip())
@@ -247,6 +253,7 @@ def handle_admin_message(msg):
                 admin_send_message(chat_id, INVALID_INPUT, kb_back())
             return
 
+        # ===== ویرایش دسته =====
         if step == "edit_cat_add":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -310,6 +317,7 @@ def handle_admin_message(msg):
             admin_user_states.pop(user_id, None)
             return
 
+        # ===== ویرایش آیدی نظرات =====
         if step == "edit_feedback":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -325,6 +333,7 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, EDIT_FEEDBACK_UPDATED.format(id=new_id), kb_edit_menu())
             return
 
+        # ===== ویرایش شماره کارت =====
         if step == "edit_card_number":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -350,6 +359,7 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, EDIT_CARD_UPDATED.format(card=new_card, owner=new_owner), kb_edit_menu())
             return
 
+        # ===== ویرایش کلی تعرفه =====
         if step == "edit_bulk_percent":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -385,6 +395,7 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, "لطفاً از دکمه‌های بالا استفاده کنید.", kb_bulk_confirm())
             return
 
+        # ===== افزودن شهر =====
         if step == "city_add":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -407,6 +418,7 @@ def handle_admin_message(msg):
                 admin_send_message(chat_id, EDIT_CITY_EXISTS.format(city=name), kb_back())
             return
 
+    # پیام نامشخص
     if is_admin(user_id):
         handle_admin_start(chat_id, user_id)
     else:
@@ -420,7 +432,10 @@ def handle_admin_callback(cb):
     chat_id = cb.get("message", {}).get("chat", {}).get("id")
     data = cb.get("data", "")
 
-    print("[ADMIN CB]", user_id, data[:40])
+    try:
+        print("[ADMIN CB]", user_id, data[:40])
+    except:
+        pass
 
     if not is_authed_admin(user_id):
         admin_answer_callback(cb_id, "دسترسی ندارید")
@@ -429,6 +444,7 @@ def handle_admin_callback(cb):
     parts = data.split(":")
     action = parts[1] if len(parts) > 1 else ""
 
+    # ===== شارژ کیف پول =====
     if data.startswith("wadm:"):
         sub_action = parts[1]
         txn_id = int(parts[2])
@@ -441,6 +457,7 @@ def handle_admin_callback(cb):
         admin_answer_callback(cb_id)
         return
 
+    # ===== ویرایش کلی تعرفه =====
     if data == "bulk:confirm":
         state = admin_user_states.get(user_id, {})
         percent = state.get("data", {}).get("percent")
@@ -463,6 +480,7 @@ def handle_admin_callback(cb):
         admin_send_message(chat_id, EDIT_BULK_CANCELED, kb_edit_menu())
         return
 
+    # ===== مدیریت شهرها =====
     if data.startswith("adm:citypage:"):
         page = int(parts[2])
         admin_answer_callback(cb_id)
@@ -497,6 +515,7 @@ def handle_admin_callback(cb):
         admin_send_message(chat_id, "لغو شد.", kb_edit_cities_menu())
         return
 
+    # ===== رفع مسدودی =====
     if data.startswith("adm:unblock:"):
         target = int(parts[2])
         do_unblock_user(chat_id, target)
@@ -605,7 +624,7 @@ def handle_admin_callback(cb):
     admin_answer_callback(cb_id)
 
 
-# ==================== نمایش‌ها ====================
+# ==================== نمایش آمار ====================
 def show_stats(chat_id):
     stats = get_stats()
     txt = "📊 آمار کلی ربات\n\n"
@@ -620,6 +639,7 @@ def show_stats(chat_id):
     admin_send_message(chat_id, txt, kb_admin())
 
 
+# ==================== لیست در انتظار ====================
 def show_pending_list(chat_id):
     pending = [e for e in load_experts() if e.get("status") == "pending"]
     if not pending:
@@ -673,6 +693,7 @@ def reject_expert(user_id, chat_id):
         pass
 
 
+# ==================== لیست متخصصین ====================
 def show_experts_list(chat_id):
     experts = [e for e in load_experts() if e.get("status", "approved") == "approved"]
     if not experts:
@@ -732,6 +753,7 @@ def remove_expert(expert_id, chat_id):
     admin_send_message(chat_id, ADM_DELETED, kb_admin())
 
 
+# ==================== آخرین معرفی‌ها ====================
 def show_jobs(chat_id):
     jobs = load_jobs()
     if not jobs:
@@ -743,6 +765,7 @@ def show_jobs(chat_id):
     admin_send_message(chat_id, txt, kb_admin())
 
 
+# ==================== درآمد ====================
 def show_revenue(chat_id):
     experts = load_experts()
     total_refs = sum(e.get("referral_count", 0) for e in experts)
@@ -753,6 +776,7 @@ def show_revenue(chat_id):
     admin_send_message(chat_id, txt, kb_admin())
 
 
+# ==================== مدیران ====================
 def show_operators(chat_id):
     operators = get_operators()
     txt = "👥 مدیران:\n\n"
@@ -782,11 +806,13 @@ def show_remove_operator(chat_id):
     admin_send_message(chat_id, "روی مدیر مورد نظر بزنید:", kb)
 
 
+# ==================== تغییر رمز ====================
 def ask_change_password(chat_id, user_id):
     admin_user_states[user_id] = {"step": "adm_change_new", "data": {}}
     admin_send_message(chat_id, ADM_ENTER_NEW_PASS, kb_back())
 
 
+# ==================== منوی ویرایش ====================
 def show_edit_menu(chat_id):
     admin_send_message(chat_id, "✏️ منوی ویرایش\n\nیکی از گزینه‌ها را انتخاب کنید:", kb_edit_menu())
 
