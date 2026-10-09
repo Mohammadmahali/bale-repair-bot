@@ -84,6 +84,7 @@ def create_job(customer_id, customer_chat_id, expert, info):
         "sent_for_stage": 0,
         "info": info,
         "rated_stages": [],
+        "device_name": info.get("sub", ""),
     }
     db_sql.upsert_job(job)
     inc_referral_count(expert["user_id"])
@@ -232,7 +233,7 @@ def is_shop_open(expert):
     return True
 
 
-# ==================== سازگاری با کد قبلی ====================
+# ==================== سازگاری ====================
 def load_admin_config():
     return {
         "passwords": db_sql.config_get("passwords", {}),
@@ -320,10 +321,8 @@ def is_expert_in_free_period(expert):
     now = int(time.time())
     days_passed = (now - created_at) / 86400
     customers_used = expert.get("referral_count", 0)
-
     time_done = days_passed >= FREE_DAYS
     customers_done = customers_used >= FREE_CUSTOMERS
-
     if time_done and customers_done:
         return False
     return True
@@ -523,7 +522,7 @@ def get_all_sub_tariffs():
     return result
 
 
-# ==================== امتیازدهی تفکیک‌شده بر تخصص ====================
+# ==================== امتیازدهی تفکیک‌شده ====================
 def add_spec_rating(expert_id, specialty, stage, criteria_key, stars):
     e = find_expert_by_id(expert_id)
     if not e:
@@ -637,3 +636,167 @@ def get_comment_count(expert_id):
 
 def has_rated(expert_id, customer_id, stage):
     return db_sql.has_rated(expert_id, customer_id, stage)
+
+
+# ==================== مدیریت شهرها ====================
+def get_all_cities():
+    from config import IRAN_CITIES as DEFAULT
+    extras = db_sql.config_get("extra_cities", [])
+    removed = db_sql.config_get("removed_cities", [])
+
+    result = list(DEFAULT)
+    for c in extras:
+        if c not in result:
+            result.append(c)
+    result = [c for c in result if c not in removed]
+    return result
+
+
+def add_city_db(name):
+    from config import IRAN_CITIES as DEFAULT
+    name = (name or "").strip()
+    if not name:
+        return False
+
+    if name in DEFAULT:
+        removed = db_sql.config_get("removed_cities", [])
+        if name in removed:
+            removed.remove(name)
+            db_sql.config_set("removed_cities", removed)
+            return True
+        return False
+
+    extras = db_sql.config_get("extra_cities", [])
+    if name in extras:
+        return False
+    extras.append(name)
+    db_sql.config_set("extra_cities", extras)
+    return True
+
+
+def remove_city_db(name):
+    from config import IRAN_CITIES as DEFAULT
+    name = (name or "").strip()
+    if not name:
+        return False
+
+    extras = db_sql.config_get("extra_cities", [])
+    if name in extras:
+        extras.remove(name)
+        db_sql.config_set("extra_cities", extras)
+        return True
+
+    if name in DEFAULT:
+        removed = db_sql.config_get("removed_cities", [])
+        if name not in removed:
+            removed.append(name)
+            db_sql.config_set("removed_cities", removed)
+        return True
+
+    return False
+
+
+def reset_cities_db():
+    db_sql.config_set("extra_cities", [])
+    db_sql.config_set("removed_cities", [])
+    return True
+
+
+def refresh_cities_cache():
+    try:
+        import config
+        new_list = get_all_cities()
+        config.IRAN_CITIES.clear()
+        config.IRAN_CITIES.extend(new_list)
+        return len(new_list)
+    except Exception as ex:
+        print("refresh_cities_cache error:", str(ex)[:100])
+        return 0
+
+
+# ==================== لاگ عیوب دستگاه ====================
+def add_device_log(job_code, expert_id, customer_id, device_name, defect_text,
+                   author_id, author_role):
+    return db_sql.add_device_log(job_code, expert_id, customer_id, device_name,
+                                 defect_text, author_id, author_role)
+
+
+def get_device_logs(job_code):
+    return db_sql.get_device_logs(job_code)
+
+
+def get_device_log(log_id):
+    return db_sql.get_device_log(log_id)
+
+
+def update_device_log(log_id, new_text):
+    return db_sql.update_device_log(log_id, new_text)
+
+
+def delete_device_log(log_id):
+    return db_sql.delete_device_log(log_id)
+
+
+def get_customer_jobs_with_logs(customer_id, limit=10):
+    return db_sql.get_customer_jobs_with_logs(customer_id, limit)
+
+
+# ==================== امنیت ====================
+def log_security_event(user_id, event_type, details=""):
+    return db_sql.log_security_event(user_id, event_type, details)
+
+
+def get_recent_security_events(limit=50):
+    return db_sql.get_recent_security_events(limit)
+
+
+def is_user_blocked(user_id):
+    return db_sql.is_user_blocked(user_id)
+
+
+def block_user(user_id, reason, blocked_by, duration_hours=0):
+    return db_sql.block_user(user_id, reason, blocked_by, duration_hours)
+
+
+def unblock_user(user_id):
+    return db_sql.unblock_user(user_id)
+
+
+def get_blocked_users():
+    return db_sql.get_blocked_users()
+
+
+def get_login_attempts(user_id):
+    return db_sql.get_login_attempts(user_id)
+
+
+def record_login_attempt(user_id, success):
+    return db_sql.record_login_attempt(user_id, success)
+
+
+def is_login_locked(user_id):
+    return db_sql.is_login_locked(user_id)
+
+
+def reset_login_attempts(user_id):
+    return db_sql.reset_login_attempts(user_id)
+
+
+# ==================== نگهداری ====================
+def cleanup_old_data(days=180):
+    """پاکسازی داده‌های قدیمی‌تر از N روز"""
+    cutoff = int(time.time()) - (days * 86400)
+
+    jobs_deleted = db_sql.delete_old_jobs(cutoff)
+    comments_deleted = db_sql.delete_old_comments(cutoff)
+    logs_deleted = db_sql.delete_old_device_logs(cutoff)
+    txns_deleted = db_sql.delete_old_wallet_transactions(cutoff)
+    events_deleted = db_sql.cleanup_old_security_events(days=30)
+
+    return {
+        "jobs": jobs_deleted,
+        "comments": comments_deleted,
+        "logs": logs_deleted,
+        "txns": txns_deleted,
+        "events": events_deleted,
+    }
