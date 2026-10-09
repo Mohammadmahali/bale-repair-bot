@@ -11,6 +11,7 @@ from api_admin import (
 from keyboards import (
     kb_admin, kb_back, kb_main,
     kb_edit_menu, kb_categories_list, kb_tariffs_list,
+    kb_bulk_confirm,
 )
 from texts import (
     ADM_TITLE, ADM_ASK_PASS, ADM_WRONG_PASS, ADM_NOT_AUTH,
@@ -31,6 +32,9 @@ from texts import (
     EDIT_TARIFF_UPDATED, EDIT_TARIFF_INVALID, EDIT_FEEDBACK_ASK,
     EDIT_FEEDBACK_UPDATED, EDIT_CARD_ASK, EDIT_CARD_OWNER_ASK,
     EDIT_CARD_UPDATED, EDIT_SAVED, EDIT_CANCELED,
+    BTN_BULK_TARIFF,
+    EDIT_BULK_TITLE, EDIT_BULK_ASK, EDIT_BULK_INVALID,
+    EDIT_BULK_PREVIEW, EDIT_BULK_DONE, EDIT_BULK_CANCELED,
 )
 from db import (
     get_operators, add_operator, remove_operator,
@@ -44,6 +48,7 @@ from db import (
     get_category_by_index, get_sub_by_index,
     get_sub_tariff, set_sub_tariff, get_all_sub_tariffs,
 )
+from tariffs import preview_bulk, apply_bulk, get_current_tariffs
 import config
 
 
@@ -72,11 +77,11 @@ def handle_admin_start(chat_id, user_id):
     if not is_admin(user_id):
         admin_send_message(chat_id, ADM_NOT_AUTH)
         return
-    
+
     if is_authed_admin(user_id):
         admin_send_message(chat_id, ADM_TITLE, kb_admin())
         return
-    
+
     pw = get_user_password(user_id)
     if pw is None:
         admin_user_states[user_id] = {"step": "adm_set_pass", "data": {}}
@@ -91,14 +96,14 @@ def handle_admin_message(msg):
     chat_id = msg.get("chat", {}).get("id")
     user_id = msg.get("from", {}).get("id")
     text = msg.get("text", "")
-    
+
     print("[ADMIN]", user_id, text[:30].encode("ascii", "replace").decode())
-    
+
     # /start
     if text == "/start":
         handle_admin_start(chat_id, user_id)
         return
-    
+
     # اگه authed هست
     if is_authed_admin(user_id):
         if text == ADM_EXIT:
@@ -126,6 +131,8 @@ def handle_admin_message(msg):
             show_categories_list(chat_id); return
         if text == BTN_EDIT_TARIFFS:
             show_tariffs_list(chat_id); return
+        if text == BTN_BULK_TARIFF:
+            start_bulk_edit(chat_id, user_id); return
         if text == BTN_EDIT_FEEDBACK:
             admin_user_states[user_id] = {"step": "edit_feedback", "data": {}}
             admin_send_message(chat_id, EDIT_FEEDBACK_ASK, kb_back())
@@ -134,18 +141,18 @@ def handle_admin_message(msg):
             admin_user_states[user_id] = {"step": "edit_card_number", "data": {}}
             admin_send_message(chat_id, EDIT_CARD_ASK, kb_back())
             return
-    
+
     # state machine
     if user_id in admin_user_states:
         state = admin_user_states[user_id]
         step = state["step"]
         data = state["data"]
-        
+
         if text == BTN_BACK:
             admin_user_states.pop(user_id, None)
             admin_send_message(chat_id, USE_MENU)
             return
-        
+
         # تنظیم رمز اول
         if step == "adm_set_pass":
             if len(text) < 4:
@@ -155,7 +162,7 @@ def handle_admin_message(msg):
             state["step"] = "adm_set_pass_confirm"
             admin_send_message(chat_id, ADM_ENTER_AGAIN, kb_back())
             return
-        
+
         if step == "adm_set_pass_confirm":
             if text != data.get("new_pass"):
                 state["step"] = "adm_set_pass"
@@ -168,7 +175,7 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, ADM_PASS_SET_OK)
             admin_send_message(chat_id, ADM_TITLE, kb_admin())
             return
-        
+
         # ورود با رمز
         if step == "adm_password":
             pw = get_user_password(user_id)
@@ -179,7 +186,7 @@ def handle_admin_message(msg):
             else:
                 admin_send_message(chat_id, ADM_WRONG_PASS, kb_back())
             return
-        
+
         # تغییر رمز
         if step == "adm_change_new":
             if len(text) < 4:
@@ -189,7 +196,7 @@ def handle_admin_message(msg):
             state["step"] = "adm_change_confirm"
             admin_send_message(chat_id, ADM_ENTER_AGAIN, kb_back())
             return
-        
+
         if step == "adm_change_confirm":
             if text != data.get("new_pass"):
                 state["step"] = "adm_change_new"
@@ -200,7 +207,7 @@ def handle_admin_message(msg):
             admin_user_states.pop(user_id, None)
             admin_send_message(chat_id, ADM_PASS_SET_OK, kb_admin())
             return
-        
+
         # افزودن اپراتور
         if step == "adm_add_op":
             try:
@@ -211,7 +218,7 @@ def handle_admin_message(msg):
             except:
                 admin_send_message(chat_id, INVALID_INPUT, kb_back())
             return
-        
+
         # ویرایش: افزودن دسته‌بندی
         if step == "edit_cat_add":
             if text in [BTN_CANCEL, BTN_BACK]:
@@ -228,7 +235,7 @@ def handle_admin_message(msg):
                 admin_send_message(chat_id, "⚠️ این دسته‌بندی قبلاً وجود داره.", kb_edit_menu())
             admin_user_states.pop(user_id, None)
             return
-        
+
         # ویرایش: افزودن زیرتخصص
         if step == "edit_sub_add":
             if text in [BTN_CANCEL, BTN_BACK]:
@@ -251,7 +258,7 @@ def handle_admin_message(msg):
                 admin_send_message(chat_id, "⚠️ این زیرتخصص قبلاً وجود داره.", kb_edit_menu())
             admin_user_states.pop(user_id, None)
             return
-        
+
         # ویرایش: تعرفه جدید (قدیمی - برای سازگاری)
         if step == "edit_tariff":
             if text in [BTN_CANCEL, BTN_BACK]:
@@ -274,7 +281,7 @@ def handle_admin_message(msg):
             admin_user_states.pop(user_id, None)
             admin_send_message(chat_id, EDIT_TARIFF_UPDATED.format(amount="{:,}".format(amount)), kb_edit_menu())
             return
-        
+
         # ویرایش: تعرفه زیرتخصص
         if step == "edit_sub_tariff":
             if text in [BTN_CANCEL, BTN_BACK]:
@@ -300,7 +307,7 @@ def handle_admin_message(msg):
                 admin_send_message(chat_id, "خطا در ذخیره.", kb_edit_menu())
             admin_user_states.pop(user_id, None)
             return
-        
+
         # ویرایش: آیدی نظرات
         if step == "edit_feedback":
             if text in [BTN_CANCEL, BTN_BACK]:
@@ -316,7 +323,7 @@ def handle_admin_message(msg):
             admin_user_states.pop(user_id, None)
             admin_send_message(chat_id, EDIT_FEEDBACK_UPDATED.format(id=new_id), kb_edit_menu())
             return
-        
+
         # ویرایش: شماره کارت
         if step == "edit_card_number":
             if text in [BTN_CANCEL, BTN_BACK]:
@@ -327,7 +334,7 @@ def handle_admin_message(msg):
             state["step"] = "edit_card_owner"
             admin_send_message(chat_id, EDIT_CARD_OWNER_ASK, kb_back())
             return
-        
+
         if step == "edit_card_owner":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -342,7 +349,43 @@ def handle_admin_message(msg):
             admin_user_states.pop(user_id, None)
             admin_send_message(chat_id, EDIT_CARD_UPDATED.format(card=new_card, owner=new_owner), kb_edit_menu())
             return
-    
+
+        # ویرایش کلی تعرفه (درصدی) - دریافت درصد
+        if step == "edit_bulk_percent":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                admin_user_states.pop(user_id, None)
+                show_edit_menu(chat_id)
+                return
+            try:
+                percent = float(text.strip().replace("٪", "").replace("%", "").replace("،", ""))
+                if percent < -50 or percent > 100:
+                    raise ValueError
+            except:
+                admin_send_message(chat_id, EDIT_BULK_INVALID, kb_back())
+                return
+
+            data["percent"] = percent
+            preview = preview_bulk(percent)
+
+            ex1 = preview["examples"][0] if len(preview["examples"]) > 0 else ("—", 0, 0)
+            ex2 = preview["examples"][1] if len(preview["examples"]) > 1 else ("—", 0, 0)
+
+            msg = EDIT_BULK_PREVIEW.format(
+                count=preview["count"],
+                percent=percent,
+                ex_old1="{:,}".format(ex1[1]),
+                ex_new1="{:,}".format(ex1[2]),
+                ex_old2="{:,}".format(ex2[1]),
+                ex_new2="{:,}".format(ex2[2]),
+            )
+            admin_send_message(chat_id, msg, kb_bulk_confirm())
+            state["step"] = "edit_bulk_confirm"
+            return
+
+        if step == "edit_bulk_confirm":
+            admin_send_message(chat_id, "لطفاً از دکمه‌های بالا استفاده کنید.", kb_bulk_confirm())
+            return
+
     # پیام نامشخص
     if is_admin(user_id):
         handle_admin_start(chat_id, user_id)
@@ -356,15 +399,15 @@ def handle_admin_callback(cb):
     user_id = cb.get("from", {}).get("id")
     chat_id = cb.get("message", {}).get("chat", {}).get("id")
     data = cb.get("data", "")
-    
+
     print("[ADMIN CB]", user_id, data[:40])
-    
+
     if not is_authed_admin(user_id):
         admin_answer_callback(cb_id, "دسترسی ندارید")
         return
-    
+
     parts = data.split(":")
-    action = parts[1] if len(parts) > 1 else ""    
+    action = parts[1] if len(parts) > 1 else ""
 
     # ===== تأیید/رد شارژ کیف پول =====
     if data.startswith("wadm:"):
@@ -378,7 +421,31 @@ def handle_admin_callback(cb):
             reject_wallet_txn(txn_id, chat_id, user_id)
         admin_answer_callback(cb_id)
         return
-    
+
+    # ===== ویرایش کلی تعرفه‌ها - تأیید =====
+    if data == "bulk:confirm":
+        state = admin_user_states.get(user_id, {})
+        percent = state.get("data", {}).get("percent")
+        if percent is None:
+            admin_answer_callback(cb_id, "خطا: درصد پیدا نشد")
+            return
+        count = apply_bulk(percent)
+        admin_user_states.pop(user_id, None)
+        admin_answer_callback(cb_id, "✅ اعمال شد")
+        admin_send_message(
+            chat_id,
+            EDIT_BULK_DONE.format(count=count, percent=percent),
+            kb_edit_menu()
+        )
+        return
+
+    # ===== ویرایش کلی تعرفه‌ها - انصراف =====
+    if data == "bulk:cancel":
+        admin_user_states.pop(user_id, None)
+        admin_answer_callback(cb_id, "❌ لغو شد")
+        admin_send_message(chat_id, EDIT_BULK_CANCELED, kb_edit_menu())
+        return
+
     try:
         if action == "exp":
             show_expert_detail(chat_id, int(parts[2]))
@@ -477,7 +544,7 @@ def handle_admin_callback(cb):
                 )
     except Exception as ex:
         print("[ADMIN CB ERROR]", str(ex)[:200])
-    
+
     admin_answer_callback(cb_id)
 
 
@@ -677,16 +744,16 @@ def show_edit_menu(chat_id):
 def show_categories_list(chat_id):
     """نمایش لیست دسته‌بندی‌ها"""
     cats = get_all_categories()
-    
+
     txt = "📂 مدیریت دسته‌بندی‌ها\n\n"
     kb = {"inline_keyboard": []}
-    
+
     for idx, (cat, subs) in enumerate(cats.items()):
         txt += "{}. {} ({} زیرتخصص)\n".format(idx + 1, cat, len(subs))
         kb["inline_keyboard"].append([
             {"text": "✏️ " + cat, "callback_data": "adm:editcat:" + str(idx)}
         ])
-    
+
     kb["inline_keyboard"].append([
         {"text": "➕ افزودن دسته جدید", "callback_data": "adm:addcat"}
     ])
@@ -702,7 +769,7 @@ def show_category_detail(chat_id, cat_idx):
     if not cat:
         admin_send_message(chat_id, "دسته پیدا نشد.", kb_edit_menu())
         return
-    
+
     subs = get_category_subs(cat)
     txt = "📂 دسته: {}\n\n".format(cat)
     if subs:
@@ -710,7 +777,7 @@ def show_category_detail(chat_id, cat_idx):
             txt += "{}. {}\n".format(i, s)
     else:
         txt += "هنوز زیرتخصصی نداره.\n"
-    
+
     kb = {"inline_keyboard": [
         [{"text": "➕ افزودن زیرتخصص", "callback_data": "adm:addsub:" + str(cat_idx)}],
         [{"text": "🗑 حذف زیرتخصص", "callback_data": "adm:delsublist:" + str(cat_idx)}],
@@ -726,12 +793,12 @@ def show_subs_delete_list(chat_id, cat_idx):
     if not cat:
         admin_send_message(chat_id, "دسته پیدا نشد.", kb_edit_menu())
         return
-    
+
     subs = get_category_subs(cat)
     if not subs:
         admin_send_message(chat_id, "زیرتخصصی برای حذف وجود نداره.", kb_edit_menu())
         return
-    
+
     kb = {"inline_keyboard": []}
     for i, s in enumerate(subs):
         kb["inline_keyboard"].append([
@@ -746,20 +813,20 @@ def show_subs_delete_list(chat_id, cat_idx):
 def show_tariffs_list(chat_id):
     """لیست دسته‌بندی‌ها برای ویرایش تعرفه"""
     cats = get_all_categories()
-    
+
     txt = "💰 ویرایش تعرفه‌ها\n\n"
     txt += "یه دسته‌بندی رو انتخاب کنید تا تعرفه زیرتخصص‌هاش رو ببینید:\n\n"
-    
+
     kb = {"inline_keyboard": []}
     for idx, (cat, subs) in enumerate(cats.items()):
         kb["inline_keyboard"].append([
             {"text": "💰 " + cat, "callback_data": "adm:tariffcat:" + str(idx)}
         ])
-    
+
     kb["inline_keyboard"].append([
         {"text": BTN_BACK, "callback_data": "adm:backedit"}
     ])
-    
+
     admin_send_message(chat_id, txt, kb)
 
 
@@ -769,57 +836,65 @@ def show_sub_tariffs_list(chat_id, cat_idx):
     if not cat:
         admin_send_message(chat_id, "دسته پیدا نشد.", kb_edit_menu())
         return
-    
+
     subs = get_category_subs(cat)
     if not subs:
         admin_send_message(chat_id, "این دسته زیرتخصصی نداره.", kb_edit_menu())
         return
-    
+
     txt = "💰 تعرفه‌های «{}»\n\n".format(cat)
     kb = {"inline_keyboard": []}
-    
+
     for i, sub in enumerate(subs):
         tariff = get_sub_tariff(sub)
         txt += "• {}: {:,} تومان\n".format(sub, tariff)
         kb["inline_keyboard"].append([
             {"text": "✏️ {}".format(sub), "callback_data": "adm:tariffsub:" + str(cat_idx) + ":" + str(i)}
         ])
-    
+
     kb["inline_keyboard"].append([
         {"text": BTN_BACK, "callback_data": "adm:edittarifflist"}
     ])
-    
+
     admin_send_message(chat_id, txt, kb)
+
+
+# ==================== ویرایش کلی تعرفه ====================
+def start_bulk_edit(chat_id, user_id):
+    """شروع ویرایش کلی درصدی تعرفه‌ها"""
+    admin_user_states[user_id] = {"step": "edit_bulk_percent", "data": {}}
+    msg = EDIT_BULK_TITLE + "\n\n" + EDIT_BULK_ASK
+    admin_send_message(chat_id, msg, kb_back())
 
 
 # ==================== حلقه اصلی ====================
 def run_admin_bot():
     print("[ADMIN] Starting admin bot...")
-    
+
     try:
         admin_delete_webhook()
         print("[ADMIN] Webhook deleted")
     except:
         pass
-    
+
     me = admin_get_me()
     if me:
         print("[ADMIN] Bot username:", me.get("username", "?"))
-    
+
     try:
         admin_clear_old_updates()
         print("[ADMIN] Old updates cleared")
     except:
         pass
-    
+
     offset = None
     fail_count = 0
-    
+
     while True:
         try:
             updates = admin_get_updates(offset)
             fail_count = 0
-            
+
             if updates.get("ok") and updates.get("result"):
                 for u in updates["result"]:
                     offset = u["update_id"] + 1
@@ -830,7 +905,7 @@ def run_admin_bot():
                             handle_admin_callback(u["callback_query"])
                     except Exception as ex:
                         print("[ADMIN Handler]", str(ex)[:100])
-        
+
         except Exception as ex:
             fail_count += 1
             print("[ADMIN Loop]", str(fail_count), str(ex)[:100])
@@ -840,5 +915,5 @@ def run_admin_bot():
             else:
                 time.sleep(10)
             continue
-        
+
         time.sleep(2)
