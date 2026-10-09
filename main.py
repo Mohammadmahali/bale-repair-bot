@@ -122,7 +122,7 @@ def handle_message(msg):
         return
 
     # ===== امنیت: Rate limit =====
-    if not check_rate_limit(chat_id, user_id, max_count=15, window_seconds=60):
+    if not check_rate_limit(chat_id, user_id, max_count=60, window_seconds=60):
         send_message(chat_id, SEC_RATE_LIMIT)
         return
 
