@@ -507,3 +507,139 @@ SEC_BLOCKED = "❌ دسترسی شما محدود شده است."
 # ==================== نگهداری ۶ ماهه ====================
 RETENTION_NOTICE = "ℹ️ اطلاعات بعد از ۶ ماه به دلایل قانونی حذف می‌شود."
 RETENTION_CLEANUP_DONE = "✅ پاکسازی داده‌های قدیمی انجام شد."
+# ==================== مدیریت شهرها ====================
+BTN_EDIT_CITIES = "🏙 ویرایش شهرها"
+
+EDIT_CITIES_TITLE = """🏙 مدیریت شهرها
+
+در این بخش می‌توانید شهرها را اضافه یا حذف کنید.
+
+📊 تعداد فعلی شهرها: {count}"""
+
+EDIT_CITIES_ASK_NEW = "🏙 نام شهر جدید را وارد کنید:\n\nمثال: رشت"
+EDIT_CITY_ADDED = "✅ شهر «{city}» اضافه شد."
+EDIT_CITY_EXISTS = "⚠️ شهر «{city}» قبلاً وجود داره."
+EDIT_CITY_REMOVED = "✅ شهر «{city}» حذف شد."
+EDIT_CITY_NOT_FOUND = "❌ شهر «{city}» پیدا نشد."
+EDIT_CITY_INVALID = "❌ نام شهر نامعتبر. لطفاً دوباره وارد کنید."
+EDIT_CITIES_LIST_TITLE = "🗑 حذف شهر:\n\nروی شهر مورد نظر بزنید تا حذف بشه:"
+EDIT_CITIES_RESET = "🔄 بازگشت به لیست پیش‌فرض"
+EDIT_CITIES_RESET_OK = "✅ لیست شهرها به حالت پیش‌فرض برگشت."
+EDIT_CITIES_RESET_CONFIRM = """⚠️ مطمئنید؟
+
+با این کار همه تغییرات (اضافه/حذف) پاک می‌شن و
+لیست شهرها به حالت اولیه برمی‌گرده."""
+BTN_CITIES_NEXT = "➡️ بعدی"
+BTN_CITIES_PREV = "⬅️ قبلی"
+
+# ==================== لاگ عیوب دستگاه (اضافه‌ها) ====================
+BTN_DEVICE_LOG = "📋 لاگ عیوب"
+BTN_ADD_DEFECT = "➕ افزودن عیب"
+BTN_VIEW_DEVICE_LOGS = "📋 لاگ عیوب دستگاه‌ها"
+
+DEVICE_LOG_EMPTY = "📋 هنوز عیبی برای این دستگاه ثبت نشده."
+DEVICE_LOG_FOR_JOB = """📋 لاگ عیوب دستگاه
+
+🎫 کد پیگیری: {code}
+🔧 دستگاه: {device}
+
+━━━━━━━━━━━━━━━━━
+{logs}
+━━━━━━━━━━━━━━━━━"""
+
+DEVICE_LOG_ASK_DEVICE_NAME = "🔧 نام دستگاه را وارد کنید:\n\nمثال: ماشین لباسشویی"
+DEVICE_LOG_ASK_DEFECT = "📝 عیب دستگاه را توضیح دهید:"
+DEVICE_LOG_ADDED = "✅ عیب ثبت شد."
+DEVICE_LOG_UPDATED = "✅ ویرایش ثبت شد."
+DEVICE_LOG_DELETED_MSG = "🗑 حذف شد."
+DEVICE_LOG_EDIT_BTN = "✏️ ویرایش"
+DEVICE_LOG_EDIT_ASK = "📝 متن جدید را وارد کنید:"
+DEVICE_LOG_ONLY_AUTHOR = "❌ فقط نویسنده می‌تواند ویرایش کند."
+DEVICE_LOG_NO_JOBS = "هنوز درخواستی با لاگ عیب ندارید."
+
+DEVICE_LOG_ITEM_SIMPLE = """📝 {date}
+👤 {author} {role}:
+«{text}»"""
+
+DEVICE_LOG_ITEM_EDITED = """📝 {date}
+👤 {author} {role} - ✏️ ویرایش شده:
+«{text}»
+قبل: «{old_text}»"""
+
+DEVICE_LOG_NEW_NOTIFY = """🔔 عیب جدید ثبت شد!
+
+🎫 کد: {code}
+🔧 دستگاه: {device}
+📝 «{text}»
+
+نویسنده: {author}"""
+
+# ==================== امنیت (اضافه‌ها) ====================
+SEC_LOGIN_LOCKED = """🔐 حساب شما به دلیل تلاش‌های ناموفق قفل شده.
+
+⏳ لطفاً {minutes} دقیقه دیگر دوباره تلاش کنید."""
+
+SEC_LOGIN_ATTEMPTS_LEFT = "⚠️ رمز اشتباه. {left} تلاش باقی‌مانده."
+SEC_LOGIN_SUCCESS = "✅ ورود موفق."
+
+SEC_SUSPICIOUS_MSG = """⚠️ فعالیت مشکوک شناسایی شد.
+
+دسترسی شما به دلیل ارسال محتوای نامناسب محدود شد.
+برای پیگیری با پشتیبانی تماس بگیرید."""
+
+SEC_BLOCKED_PERMANENT = """🚫 دسترسی شما مسدود شده است.
+
+دلیل: {reason}
+
+برای پیگیری با پشتیبانی تماس بگیرید."""
+
+SEC_BLOCKED_TEMP = """🚫 دسترسی شما موقتاً محدود شده است.
+
+دلیل: {reason}
+⏳ تا: {until}
+
+برای پیگیری با پشتیبانی تماس بگیرید."""
+
+# ---- پنل امنیتی ادمین ----
+ADM_SECURITY = "🛡 امنیت"
+ADM_SEC_EVENTS = "📋 رویدادهای اخیر"
+ADM_SEC_BLOCKED = "🚫 کاربران مسدود"
+ADM_SEC_BACK = "🔙 بازگشت"
+
+SEC_EVENTS_TITLE = "📋 آخرین رویدادهای امنیتی:\n\n"
+SEC_EVENTS_EMPTY = "هیچ رویداد امنیتی‌ای ثبت نشده."
+SEC_BLOCKED_TITLE = "🚫 کاربران مسدود:\n\n"
+SEC_BLOCKED_EMPTY = "هیچ کاربری مسدود نیست."
+SEC_UNBLOCK = "🔓 رفع مسدودی"
+SEC_UNBLOCKED_OK = "✅ کاربر رفع مسدودی شد."
+
+SEC_EVENT_LINE = "• {date} - {user} - {type}\n"
+SEC_BLOCKED_LINE = "• {user} - {reason} ({date})\n"
+
+# ==================== نگهداری ۶ ماهه (اضافه‌ها) ====================
+RETENTION_TITLE = "🗄 نگهداری اطلاعات"
+
+RETENTION_DAYS = 180  # ۶ ماه
+RETENTION_CLEANUP_INTERVAL = 86400  # هر ۲۴ ساعت
+
+RETENTION_CLEANUP_START = "🗄 شروع پاکسازی داده‌های قدیمی..."
+RETENTION_CLEANUP_DONE_FULL = """✅ پاکسازی انجام شد:
+
+• پروژه‌های حذف‌شده: {jobs}
+• نظرات حذف‌شده: {comments}
+• لاگ‌های حذف‌شده: {logs}
+• تراکنش‌های حذف‌شده: {txns}
+• رویدادهای امنیتی حذف‌شده: {events}"""
+
+# ==================== لاگ عیب (اختصاصی ربات اصلی) ====================
+BTN_MY_DEVICE_LOGS = "📋 لاگ عیوب من"
+BTN_DEVICE_LOG_BACK = "🔙 بازگشت"
+BTN_DEVICE_LOG_VIEW = "👁 مشاهده"
+BTN_DEVICE_LOG_EDIT = "✏️ ویرایش"
+
+DEVICE_LOG_MENU_TITLE = "📋 لاگ عیوب شما:\n\n"
+DEVICE_LOG_LIST_ITEM = """🎫 {code}
+🔧 {device}
+📝 {count} عیب
+📅 {date}
+"""
