@@ -1,5 +1,4 @@
 # ==================== مدیریت دیتابیس (SQLite) ====================
-# این فایل API قبلی رو نگه داشته، ولی از SQLite استفاده می‌کنه
 import json
 import time
 import database as db_sql
@@ -9,23 +8,19 @@ from utils import gen_tracking_code, gen_expert_code
 
 # ==================== تعمیرکاران ====================
 def load_experts():
-    """خوندن همه تعمیرکاران"""
     return db_sql.load_all_experts()
 
 
 def save_experts(experts):
-    """ذخیره همه تعمیرکاران"""
     db_sql.save_all_experts(experts)
     return True
 
 
 def find_expert_by_id(user_id):
-    """پیدا کردن تعمیرکار با user_id"""
     return db_sql.get_expert(user_id)
 
 
 def find_expert_by_code(code):
-    """پیدا کردن تعمیرکار با کد اختصاصی"""
     for e in db_sql.load_all_experts():
         if e.get("expert_code") == code:
             return e
@@ -33,7 +28,6 @@ def find_expert_by_code(code):
 
 
 def add_or_update_expert(data):
-    """اضافه یا آپدیت تعمیرکار"""
     if not data.get("expert_code"):
         data["expert_code"] = gen_expert_code(data.get("name", "expert"))
     if "created_at" not in data:
@@ -43,19 +37,16 @@ def add_or_update_expert(data):
 
 
 def update_expert_field(user_id, field, value):
-    """آپدیت یه فیلد"""
     db_sql.update_expert(user_id, field, value)
     return True
 
 
 def delete_expert(user_id):
-    """حذف تعمیرکار"""
     db_sql.delete_expert_db(user_id)
     return True
 
 
 def inc_referral_count(user_id):
-    """اضافه کردن تعداد معرفی"""
     e = db_sql.get_expert(user_id)
     if e:
         new_count = e.get("referral_count", 0) + 1
@@ -65,18 +56,15 @@ def inc_referral_count(user_id):
 
 # ==================== پروژه‌ها ====================
 def load_jobs():
-    """خوندن همه پروژه‌ها"""
     return db_sql.load_all_jobs()
 
 
 def save_jobs(jobs):
-    """ذخیره همه پروژه‌ها"""
     db_sql.save_all_jobs(jobs)
     return True
 
 
 def create_job(customer_id, customer_chat_id, expert, info):
-    """ساخت پروژه جدید"""
     jobs = load_jobs()
     code = gen_tracking_code()
     while any(j.get("tracking_code") == code for j in jobs):
@@ -103,7 +91,6 @@ def create_job(customer_id, customer_chat_id, expert, info):
 
 
 def get_pending_job(customer_id, expert_id):
-    """گرفتن پروژه در انتظار نظرسنجی"""
     j = db_sql.find_job(customer_id, expert_id)
     if j and j.get("sent_for_stage", 0) > j.get("stage", 0) and j.get("stage", 0) < 2:
         return j
@@ -111,7 +98,6 @@ def get_pending_job(customer_id, expert_id):
 
 
 def advance_job_stage(customer_id, expert_id):
-    """جلو بردن مرحله نظرسنجی"""
     j = db_sql.find_job(customer_id, expert_id)
     if not j:
         return
@@ -129,40 +115,17 @@ def update_job_field(job_id, field, value):
     return True
 
 
-def find_job_by_code(tracking_code):
-    """پیدا کردن پروژه با کد پیگیری"""
-    return db_sql.find_job_by_code(tracking_code)
-
-
-def mark_job_rated(customer_id, expert_id, stage):
-    """ثبت اینکه این مشتری برای این مرحله امتیاز داده"""
-    j = db_sql.find_job(customer_id, expert_id)
-    if not j:
-        return False
-    rated = j.get("rated_stages", [])
-    if stage not in rated:
-        rated.append(stage)
-        db_sql.update_job(j["id"], "rated_stages", rated)
-    return True
-
-
-def is_job_rated(customer_id, expert_id, stage):
-    """آیا مشتری برای این stage امتیاز داده؟"""
-    j = db_sql.find_job(customer_id, expert_id)
-    if not j:
-        return False
-    return stage in j.get("rated_stages", [])
+def find_job_by_code(code):
+    return db_sql.find_job_by_code(code)
 
 
 # ==================== تنظیمات ادمین ====================
 def get_user_password(user_id):
-    """گرفتن رمز عبور کاربر"""
     passwords = db_sql.config_get("passwords", {})
     return passwords.get(str(user_id))
 
 
 def set_user_password(user_id, password):
-    """ذخیره رمز عبور"""
     passwords = db_sql.config_get("passwords", {})
     passwords[str(user_id)] = password
     db_sql.config_set("passwords", passwords)
@@ -170,12 +133,10 @@ def set_user_password(user_id, password):
 
 
 def get_operators():
-    """گرفتن لیست مدیران"""
     return db_sql.config_get("operators", [])
 
 
 def add_operator(user_id):
-    """اضافه کردن مدیر"""
     operators = get_operators()
     if user_id not in operators:
         operators.append(user_id)
@@ -184,14 +145,12 @@ def add_operator(user_id):
 
 
 def remove_operator(user_id):
-    """حذف مدیر"""
     operators = [o for o in get_operators() if o != user_id]
     db_sql.config_set("operators", operators)
     return True
 
 
 def get_feedback_id():
-    """گرفتن آیدی نظرات"""
     return db_sql.config_get("feedback_id", FEEDBACK_ID)
 
 
@@ -202,14 +161,12 @@ def set_feedback_id(feedback_id):
 
 # ==================== تعرفه‌ها ====================
 def get_tariff(category, sub_specialty):
-    """گرفتن تعرفه یه تخصص"""
     tariffs = db_sql.config_get("tariffs", {})
     key = "{}::{}".format(category, sub_specialty)
     return tariffs.get(key, 50000)
 
 
 def set_tariff(category, sub_specialty, amount):
-    """ذخیره تعرفه"""
     tariffs = db_sql.config_get("tariffs", {})
     key = "{}::{}".format(category, sub_specialty)
     tariffs[key] = amount
@@ -256,7 +213,6 @@ def get_stats():
 
 
 def is_shop_open(expert):
-    """بررسی باز بودن مغازه"""
     if not expert.get("active", True):
         return False
     status = expert.get("shop_status", "active")
@@ -278,7 +234,6 @@ def is_shop_open(expert):
 
 # ==================== سازگاری با کد قبلی ====================
 def load_admin_config():
-    """برای سازگاری"""
     return {
         "passwords": db_sql.config_get("passwords", {}),
         "operators": db_sql.config_get("operators", []),
@@ -288,7 +243,6 @@ def load_admin_config():
 
 
 def save_admin_config(config):
-    """برای سازگاری"""
     if "passwords" in config:
         db_sql.config_set("passwords", config["passwords"])
     if "operators" in config:
@@ -302,7 +256,6 @@ def save_admin_config(config):
 
 # ==================== کیف پول ====================
 def get_wallet_balance(user_id):
-    """گرفتن موجودی کیف پول"""
     e = db_sql.get_expert(user_id)
     if not e:
         return 0
@@ -310,7 +263,6 @@ def get_wallet_balance(user_id):
 
 
 def add_to_wallet(user_id, amount):
-    """اضافه کردن به کیف پول"""
     e = db_sql.get_expert(user_id)
     if not e:
         return False
@@ -320,7 +272,6 @@ def add_to_wallet(user_id, amount):
 
 
 def subtract_from_wallet(user_id, amount):
-    """کم کردن از کیف پول"""
     e = db_sql.get_expert(user_id)
     if not e:
         return False
@@ -330,12 +281,10 @@ def subtract_from_wallet(user_id, amount):
 
 
 def create_wallet_charge_request(user_id, amount, receipt_message_id):
-    """ساخت درخواست شارژ"""
     return db_sql.create_wallet_request(user_id, amount, receipt_message_id)
 
 
 def approve_wallet_charge(txn_id, admin_id):
-    """تأیید شارژ کیف پول"""
     import time
     txn = db_sql.get_wallet_transaction(txn_id)
     if not txn or txn.get("status") != "pending":
@@ -348,7 +297,6 @@ def approve_wallet_charge(txn_id, admin_id):
 
 
 def reject_wallet_charge(txn_id, admin_id, reason=""):
-    """رد شارژ کیف پول"""
     import time
     txn = db_sql.get_wallet_transaction(txn_id)
     if not txn or txn.get("status") != "pending":
@@ -361,16 +309,10 @@ def reject_wallet_charge(txn_id, admin_id, reason=""):
 
 
 def get_expert_wallet_history(user_id, limit=10):
-    """تاریخچه تراکنش‌ها"""
     return db_sql.get_expert_wallet_history(user_id, limit)
 
 
 def is_expert_in_free_period(expert):
-    """آیا تعمیرکار توی دوره رایگان هست؟
-    رایگان تا دیرتر از دو حالت:
-    - FREE_DAYS روز گذشته
-    - FREE_CUSTOMERS مشتری استفاده شده
-    """
     from config import FREE_DAYS, FREE_CUSTOMERS
     created_at = expert.get("created_at", 0)
     if not created_at:
@@ -388,7 +330,6 @@ def is_expert_in_free_period(expert):
 
 
 def get_customer_history(customer_id, limit=20):
-    """تاریخچه درخواست‌های یه مشتری"""
     jobs = load_jobs()
     result = [j for j in jobs if j.get("customer_id") == customer_id]
     result.sort(key=lambda x: x.get("created_at", 0), reverse=True)
@@ -396,7 +337,6 @@ def get_customer_history(customer_id, limit=20):
 
 
 def get_expert_priority_penalty(expert):
-    """امتیاز منفی اگه بعد از ۲ ماه شارژ نداره"""
     from config import TARIFFS
     if is_expert_in_free_period(expert):
         return 0
@@ -448,14 +388,12 @@ def get_customer_chats(customer_id, filter_type="all"):
 
 
 def share_phone_in_chat(chat_id):
-    """اشتراک شماره بین دو طرف"""
     import time
     db_sql.update_chat(chat_id, "phone_shared", 1)
     return True
 
 
 def hide_chat(chat_id, user_type):
-    """مخفی کردن چت برای یه طرف"""
     if user_type == "expert":
         db_sql.update_chat(chat_id, "expert_hidden", 1)
     else:
@@ -493,7 +431,6 @@ DEFAULT_CATEGORIES = {
 
 
 def get_all_categories():
-    """گرفتن همه دسته‌بندی‌ها"""
     cats = db_sql.config_get("categories", None)
     if not cats:
         db_sql.config_set("categories", DEFAULT_CATEGORIES)
@@ -502,13 +439,11 @@ def get_all_categories():
 
 
 def get_category_subs(category):
-    """زیرتخصص‌های یه دسته"""
     cats = get_all_categories()
     return cats.get(category, [])
 
 
 def add_category_db(label):
-    """افزودن دسته"""
     cats = get_all_categories()
     if label in cats:
         return False
@@ -518,7 +453,6 @@ def add_category_db(label):
 
 
 def remove_category_db(label):
-    """حذف دسته"""
     cats = get_all_categories()
     if label not in cats:
         return False
@@ -528,7 +462,6 @@ def remove_category_db(label):
 
 
 def add_sub_db(category, sub):
-    """افزودن زیرتخصص"""
     cats = get_all_categories()
     if category not in cats:
         return False
@@ -540,7 +473,6 @@ def add_sub_db(category, sub):
 
 
 def remove_sub_db(category, sub):
-    """حذف زیرتخصص"""
     cats = get_all_categories()
     if category not in cats:
         return False
@@ -552,7 +484,6 @@ def remove_sub_db(category, sub):
 
 
 def get_category_by_index(idx):
-    """گرفتن دسته با شماره"""
     cats = list(get_all_categories().keys())
     if 0 <= idx < len(cats):
         return cats[idx]
@@ -560,7 +491,6 @@ def get_category_by_index(idx):
 
 
 def get_sub_by_index(cat_label, idx):
-    """گرفتن زیرتخصص با شماره"""
     subs = get_category_subs(cat_label)
     if 0 <= idx < len(subs):
         return subs[idx]
@@ -569,7 +499,6 @@ def get_sub_by_index(cat_label, idx):
 
 # ==================== تعرفه زیرتخصص ====================
 def get_sub_tariff(sub_specialty):
-    """گرفتن تعرفه یه زیرتخصص"""
     from config import SUB_TARIFFS
     tariffs = db_sql.config_get("sub_tariffs", {})
     if sub_specialty in tariffs:
@@ -580,7 +509,6 @@ def get_sub_tariff(sub_specialty):
 
 
 def set_sub_tariff(sub_specialty, amount):
-    """ذخیره تعرفه زیرتخصص"""
     tariffs = db_sql.config_get("sub_tariffs", {})
     tariffs[sub_specialty] = amount
     db_sql.config_set("sub_tariffs", tariffs)
@@ -588,7 +516,6 @@ def set_sub_tariff(sub_specialty, amount):
 
 
 def get_all_sub_tariffs():
-    """گرفتن همه تعرفه‌های زیرتخصص (پیش‌فرض + کاربر)"""
     from config import SUB_TARIFFS
     user_tariffs = db_sql.config_get("sub_tariffs", {})
     result = dict(SUB_TARIFFS)
@@ -598,11 +525,9 @@ def get_all_sub_tariffs():
 
 # ==================== امتیازدهی تفکیک‌شده بر تخصص ====================
 def add_spec_rating(expert_id, specialty, stage, criteria_key, stars):
-    """ثبت امتیاز برای یه تخصص خاص (داخل ratings_by_stage.by_spec)"""
     e = find_expert_by_id(expert_id)
     if not e:
         return False
-
     ratings_by_stage = e.get("ratings_by_stage", {})
     by_spec = ratings_by_stage.setdefault("by_spec", {})
     spec_data = by_spec.setdefault(specialty, {})
@@ -610,21 +535,16 @@ def add_spec_rating(expert_id, specialty, stage, criteria_key, stars):
     cell = stage_data.setdefault(criteria_key, {"sum": 0, "count": 0})
     cell["sum"] += stars
     cell["count"] += 1
-
     update_expert_field(expert_id, "ratings_by_stage", ratings_by_stage)
     return True
 
 
 def calc_spec_rating(expert, specialty):
-    """محاسبه میانگین امتیاز یه تخصص خاص"""
     from texts import CRITERIA
-
     by_spec = expert.get("ratings_by_stage", {}).get("by_spec", {})
     spec_data = by_spec.get(specialty, {})
-
     if not spec_data:
         return None
-
     total = 0
     count = 0
     for cr in CRITERIA:
@@ -637,19 +557,15 @@ def calc_spec_rating(expert, specialty):
         if rc > 0:
             total += rt / rc
             count += 1
-
     if count == 0:
         return None
     return total / count
 
 
 def get_spec_reviews_count(expert, specialty):
-    """تعداد نظرات ثبت‌شده برای یه تخصص خاص"""
     from texts import CRITERIA
-
     by_spec = expert.get("ratings_by_stage", {}).get("by_spec", {})
     spec_data = by_spec.get(specialty, {})
-
     max_count = 0
     for cr in CRITERIA:
         cnt = 0
@@ -661,7 +577,6 @@ def get_spec_reviews_count(expert, specialty):
 
 
 def get_all_spec_ratings(expert):
-    """گرفتن همه امتیازهای تفکیک‌شده بر اساس تخصص"""
     by_spec = expert.get("ratings_by_stage", {}).get("by_spec", {})
     result = {}
     for spec in by_spec.keys():
@@ -674,7 +589,6 @@ def get_all_spec_ratings(expert):
 
 
 def get_spec_rating_for_search(expert, specialty, fallback_to_overall=True):
-    """امتیاز مخصوص یه تخصص برای استفاده توی رتبه‌بندی جستجو"""
     spec_avg = calc_spec_rating(expert, specialty)
     if spec_avg is not None:
         return spec_avg
@@ -684,7 +598,6 @@ def get_spec_rating_for_search(expert, specialty, fallback_to_overall=True):
 
 
 def _calc_overall_rating(expert):
-    """محاسبه امتیاز کلی (کمکی)"""
     from texts import CRITERIA
     total = 0
     count = 0
@@ -706,28 +619,21 @@ def _calc_overall_rating(expert):
 # ==================== نظرات متنی ====================
 def add_comment(expert_id, customer_id, specialty, stage, stars, comment,
                 author_name="", is_anonymous=0):
-    """ذخیره یه نظر متنی"""
-    return db_sql.add_comment(
-        expert_id, customer_id, specialty, stage, stars, comment,
-        author_name, is_anonymous
-    )
+    return db_sql.add_comment(expert_id, customer_id, specialty, stage,
+                              stars, comment, author_name, is_anonymous)
 
 
 def get_expert_comments(expert_id, limit=20):
-    """گرفتن نظرات یه تعمیرکار"""
     return db_sql.get_expert_comments(expert_id, limit)
 
 
 def get_expert_spec_comments(expert_id, specialty, limit=10):
-    """نظرات یه تعمیرکار برای یه تخصص خاص"""
     return db_sql.get_expert_spec_comments(expert_id, specialty, limit)
 
 
 def get_comment_count(expert_id):
-    """تعداد نظرات یه تعمیرکار"""
     return db_sql.get_comment_count(expert_id)
 
 
 def has_rated(expert_id, customer_id, stage):
-    """آیا این مشتری قبلاً به این تعمیرکار امتیاز داده (برای این مرحله)؟"""
     return db_sql.has_rated(expert_id, customer_id, stage)
