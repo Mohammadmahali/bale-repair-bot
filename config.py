@@ -1,6 +1,6 @@
 # ==================== تنظیمات اصلی ====================
 TOKEN = "2007928769:77pB0gIf5DmKtAlPAEdgVAub21mH7mHn7V0"
-ADMIN_TOKEN = "1415928893:AfV6m_MJq1W7bM-bMhdoDSXXEQmK8LLlYosc"
+ADMIN_TOKEN = "1415928893:_EHB_I20KIoNvYcRWOk6QWA0LewuSHSAM9c"
 SUPER_ADMIN = 1808576881
 API_URL = "https://tapi.bale.ai/bot" + TOKEN
 BOT_USERNAME = ""
