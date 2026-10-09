@@ -56,7 +56,6 @@ from texts import (
     BTN_WALLET, BTN_CHARGE_WALLET,
     PROFILE_LOCATION_SAVED,
     BTN_BACK,
-    COMMENT_SKIP_BTN,
 )
 
 # Handlers
@@ -74,8 +73,7 @@ from handlers.wallet import (
 )
 from handlers.rating import (
     start_rating, handle_rating_callback, check_followups,
-    handle_comment_text, handle_comment_skip,
-    handle_comment_name_choice, handle_comment_name_input,
+    handle_comment_choice, handle_comment_name_choice, handle_comment_text,
 )
 from handlers.shop_status import (
     show_shop_status, start_temp_close, continue_shop_close,
@@ -137,23 +135,27 @@ def handle_message(msg):
     if user_id in sessions:
         step = sessions[user_id].get("step", "")
 
-        # ===== چک rating session (امتیاز + نظر) =====
-        if "rating" in sessions[user_id]:
-            rating_data = sessions[user_id]["rating"]
-            rstep = rating_data.get("step", "")
+        # نظر متنی در حال نوشتن
+        if step == "chat_active":
+            pass
 
-            # مرحله نظر متنی
-            if rstep == "comment_ask":
-                if text == COMMENT_SKIP_BTN:
-                    handle_comment_skip(chat_id, user_id, sessions)
-                    return
+        # ===== حالت‌های امتیازدهی =====
+        if "rating" in sessions[user_id]:
+            rating_data = sessions[user_id].get("rating", {})
+            rstep = rating_data.get("step")
+
+            if rstep == "ask_comment_text":
                 if handle_comment_text(chat_id, user_id, text, sessions):
                     return
-
-            # مرحله اسم نمایشی
-            if rstep == "comment_name_input":
-                if handle_comment_name_input(chat_id, user_id, text, sessions):
-                    return
+            if rstep == "ask_name":
+                send_message(chat_id, "لطفاً از دکمه‌های بالا استفاده کنید.", kb_main())
+                return
+            if rstep == "ask_comment":
+                send_message(chat_id, "لطفاً از دکمه‌های بالا استفاده کنید.", kb_main())
+                return
+            # اگه در حال امتیازدهی ستاره‌ای هست، پیام متنی رو نادیده بگیر
+            send_message(chat_id, "لطفاً از دکمه‌های ⭐ استفاده کنید یا بازگشت بزنید.", kb_main())
+            return
 
         # لوکیشن پروفایل - منتظر لوکیشن
         if step == "profile_location":
@@ -292,16 +294,21 @@ def handle_callback(cb):
         answer_callback(cb_id, "خطا")
         return
 
-    # ===== callback انتخاب نام/ناشناس برای نظر =====
+    # ===== callback نظر متنی: بله / رد =====
     if data.startswith("comment:"):
-        choice = data.split(":")[1]
-        if handle_comment_name_choice(chat_id, user_id, choice, sessions):
-            answer_callback(cb_id, "✅")
-            return
+        choice = data.split(":")[1]  # yes / skip / named / anon
+        if choice in ["yes", "skip"]:
+            if handle_comment_choice(chat_id, user_id, choice, sessions):
+                answer_callback(cb_id)
+                return
+        if choice in ["named", "anon"]:
+            if handle_comment_name_choice(chat_id, user_id, choice, sessions):
+                answer_callback(cb_id)
+                return
         answer_callback(cb_id, "خطا")
         return
 
-    # ===== callback امتیازدهی اولیه (دکمه ⭐ امتیاز به تعمیرکار) =====
+    # ===== callback امتیازدهی اولیه (دکمه امتیاز فوری) =====
     if data.startswith("rate:"):
         expert_id = int(data.split(":")[1])
         if start_rating(chat_id, user_id, expert_id, sessions, stage=0):
