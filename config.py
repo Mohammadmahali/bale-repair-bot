@@ -1,12 +1,35 @@
 # ==================== تنظیمات اصلی ====================
 TOKEN = "2007928769:77pB0gIf5DmKtAlPAEdgVAub21mH7mHn7V0"
-ADMIN_TOKEN = "1415928893:AfV6m_MJq1W7bM-MhdoDSXXEQmK8LLlYosc"
+ADMIN_TOKEN = "1415928893:AfV6m_MJq1W7bM-bMhdoDSXXEQmK8LLlYosc"
 SUPER_ADMIN = 1808576881
 API_URL = "https://tapi.bale.ai/bot" + TOKEN
 BOT_USERNAME = ""
 
 # ==================== نام فایل‌ها ====================
-SQLITE_FILE = "bot.db"
+import os
+import shutil
+
+# چک کن دیسک پایدار (/data) وجود داره یا نه
+if os.path.exists("/data"):
+    # ===== حالت Persistent (روی رانفلر با دیسک) =====
+    SQLITE_FILE = "/data/bot.db"
+
+    # مهاجرت خودکار: اگه دیتابیس قبلی توی ریشه پروژه هست و توی /data نیست
+    _old_db = "bot.db"
+    if os.path.exists(_old_db) and not os.path.exists(SQLITE_FILE):
+        try:
+            shutil.copy2(_old_db, SQLITE_FILE)
+            print("[CONFIG] ✅ Migrated old bot.db to /data/bot.db")
+        except Exception as e:
+            print("[CONFIG] ⚠️ Migration failed:", str(e)[:100])
+
+    print("[CONFIG] Using persistent storage: /data/bot.db")
+else:
+    # ===== حالت عادی (لوکال یا بدون دیسک) =====
+    SQLITE_FILE = "bot.db"
+    print("[CONFIG] Using local storage: bot.db")
+
+# بقیه فایل‌ها (فقط برای مهاجرت از JSON)
 DB_FILE = "experts.json"
 JOBS_FILE = "jobs.json"
 CONFIG_FILE = "bot_config.json"
@@ -111,17 +134,14 @@ SUB_TARIFFS = {
 }
 
 # ==================== شهرهای ایران ====================
-# لیست کامل از cities_data.py (قابل ویرایش توسط ادمین)
 try:
     from cities_data import get_all_cities as _get_all_cities
     IRAN_CITIES = _get_all_cities()
     print("[CONFIG] Loaded {} cities from cities_data.py".format(len(IRAN_CITIES)))
 except Exception as e:
-    print("[CONFIG] cities_data.py not found, using minimal list:", str(e)[:100])
+    print("[CONFIG] cities_data.py not found:", str(e)[:100])
     IRAN_CITIES = [
-        "تهران", "مشهد", "اصفهان", "شیراز", "تبریز", "کرج", "اهواز",
-        "قم", "کرمانشاه", "ارومیه", "رشت", "زاهدان", "همدان", "کرمان",
-        "یزد", "اردبیل", "بندرعباس", "اراک", "اسلامشهر", "زنجان",
-        "ساری", "قزوین", "خرم‌آباد", "گرگان", "سنندج", "بوشهر",
-        "بیرجند", "بجنورد", "ایلام", "شهرکرد", "یاسوج", "سمنان",
+        "تهران", "مشهد", "اصفهان", "شیراز", "تبریز", "کرج", "اهواز", "قم",
+        "کرمانشاه", "ارومیه", "رشت", "زاهدان", "همدان", "کرمان", "یزد",
+        "اردبیل", "بندرعباس", "اراک", "اسلامشهر", "زنجان", "ساری", "قزوین",
     ]
