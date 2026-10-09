@@ -12,7 +12,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'text/plain; charset=utf-8')
         self.end_headers()
         self.wfile.write("Bot is running".encode('utf-8'))
-    
+
     def log_message(self, format, *args):
         pass
 
@@ -56,6 +56,7 @@ from texts import (
     BTN_WALLET, BTN_CHARGE_WALLET,
     PROFILE_LOCATION_SAVED,
     BTN_BACK,
+    COMMENT_SKIP_BTN,
 )
 
 # Handlers
@@ -73,6 +74,8 @@ from handlers.wallet import (
 )
 from handlers.rating import (
     start_rating, handle_rating_callback, check_followups,
+    handle_comment_text, handle_comment_skip,
+    handle_comment_name_choice, handle_comment_name_input,
 )
 from handlers.shop_status import (
     show_shop_status, start_temp_close, continue_shop_close,
@@ -98,9 +101,9 @@ def handle_message(msg):
     user_id = msg.get("from", {}).get("id")
     text = msg.get("text", "")
     location = msg.get("location")
-    
+
     print(">>>", user_id, text[:30].encode("ascii", "replace").decode())
-    
+
     # ===== عکس (رسید کیف پول) =====
     if "photo" in msg:
         photos = msg.get("photo", [])
@@ -111,7 +114,7 @@ def handle_message(msg):
                 handle_receipt(chat_id, user_id, message_id, sessions, file_id)
                 return
         return
-    
+
     # ===== لوکیشن =====
     if location:
         if user_id in sessions and sessions[user_id].get("step") == "profile_location":
@@ -124,16 +127,34 @@ def handle_message(msg):
         if search_location(chat_id, user_id, location, sessions):
             return
         return
-    
+
     # ===== /start =====
     if text.startswith("/start"):
         handle_start(chat_id, user_id, text, sessions)
         return
-    
+
     # ===== اگه توی state خاصی هست =====
     if user_id in sessions:
         step = sessions[user_id].get("step", "")
-        
+
+        # ===== چک rating session (امتیاز + نظر) =====
+        if "rating" in sessions[user_id]:
+            rating_data = sessions[user_id]["rating"]
+            rstep = rating_data.get("step", "")
+
+            # مرحله نظر متنی
+            if rstep == "comment_ask":
+                if text == COMMENT_SKIP_BTN:
+                    handle_comment_skip(chat_id, user_id, sessions)
+                    return
+                if handle_comment_text(chat_id, user_id, text, sessions):
+                    return
+
+            # مرحله اسم نمایشی
+            if rstep == "comment_name_input":
+                if handle_comment_name_input(chat_id, user_id, text, sessions):
+                    return
+
         # لوکیشن پروفایل - منتظر لوکیشن
         if step == "profile_location":
             if text == BTN_BACK:
@@ -142,7 +163,7 @@ def handle_message(msg):
                 return
             send_message(chat_id, "لطفاً موقعیت مکانی خود را ارسال کنید.", kb_profile_location_send())
             return
-        
+
         # شارژ کیف پول - مبلغ
         if step == "wallet_amount":
             if text == BTN_BACK:
@@ -151,7 +172,7 @@ def handle_message(msg):
                 return
             if handle_amount(chat_id, user_id, text, sessions):
                 return
-        
+
         # شارژ کیف پول - منتظر عکس
         if step == "wallet_receipt":
             if text == BTN_BACK:
@@ -160,60 +181,60 @@ def handle_message(msg):
                 return
             send_message(chat_id, "لطفاً عکس رسید را ارسال کنید.", kb_back())
             return
-        
+
         # ادامه ثبت‌نام
         if step.startswith("reg_"):
             if continue_registration(chat_id, user_id, text, sessions):
                 return
-        
+
         # ادامه جستجو
         if step.startswith("req_"):
             if continue_search(chat_id, user_id, text, sessions, search_modes):
                 return
-        
+
         # ادامه تعطیلی مغازه
         if step.startswith("shop_"):
             if continue_shop_close(chat_id, user_id, text, sessions):
                 return
-    
+
     # ===== منوی اصلی =====
     if text == BTN_REGISTER:
         start_registration(chat_id, user_id, sessions); return
-    
+
     if text == BTN_SEARCH_SIMPLE:
         start_search(chat_id, user_id, "simple", sessions, search_modes); return
-    
+
     if text == BTN_SEARCH_ADVANCED:
         start_search(chat_id, user_id, "adv", sessions, search_modes); return
-    
+
     if text == BTN_EXPERTS_LIST:
         handle_experts_list(chat_id); return
-    
+
     if text == BTN_MY_PROFILE:
         show_profile(chat_id, user_id); return
-    
+
     if text == BTN_FEEDBACK:
         do_feedback(chat_id); return
-    
+
     if text == BTN_SHOP_STATUS:
         show_shop_status(chat_id, user_id); return
-    
+
     if text == BTN_WALLET:
         show_wallet(chat_id, user_id); return
-    
+
     if text == BTN_CHARGE_WALLET:
         start_charge(chat_id, user_id, sessions); return
-    
+
     # ===== وضعیت مغازه =====
     if text == SHOP_ACTIVE:
         set_shop_active(chat_id, user_id); return
-    
+
     if text == SHOP_CLOSED_TEMP:
         start_temp_close(chat_id, user_id, sessions); return
-    
+
     if text == SHOP_CLOSED_PERM:
         set_permanent_close(chat_id, user_id); return
-    
+
     # ===== پیش‌فرض =====
     send_message(chat_id, USE_MENU, kb_main())
 
@@ -224,14 +245,14 @@ def handle_callback(cb):
     user_id = cb.get("from", {}).get("id")
     chat_id = cb.get("message", {}).get("chat", {}).get("id")
     data = cb.get("data", "")
-    
+
     # ===== callback ثبت لوکیشن از پروفایل =====
     if data == "profile:set_location":
         sessions[user_id] = {"step": "profile_location", "data": {}}
         send_message(chat_id, "لطفاً موقعیت مکانی خود را ارسال کنید:", kb_profile_location_send())
         answer_callback(cb_id)
         return
-    
+
     # ===== callback تأیید شهر (Fuzzy) =====
     if data.startswith("cityfuzzy:"):
         action = data.split(":")[1]
@@ -240,7 +261,7 @@ def handle_callback(cb):
             return
         answer_callback(cb_id, "خطا")
         return
-    
+
     # ===== callback چند شهر مشابه =====
     if data.startswith("citymulti:"):
         choice = data.split(":")[1]
@@ -249,7 +270,7 @@ def handle_callback(cb):
             return
         answer_callback(cb_id, "خطا")
         return
-    
+
     # ===== callback انتخاب تعمیرکار =====
     if data.startswith("pick:"):
         expert_id = int(data.split(":")[1])
@@ -258,8 +279,8 @@ def handle_callback(cb):
             return
         answer_callback(cb_id, "خطا")
         return
-    
-    # ===== callback امتیازدهی =====
+
+    # ===== callback امتیازدهی (ستاره‌ها) =====
     if data.startswith("crit:"):
         parts = data.split(":")
         if len(parts) == 3:
@@ -270,8 +291,17 @@ def handle_callback(cb):
                 return
         answer_callback(cb_id, "خطا")
         return
-    
-    # ===== callback امتیازدهی اولیه =====
+
+    # ===== callback انتخاب نام/ناشناس برای نظر =====
+    if data.startswith("comment:"):
+        choice = data.split(":")[1]
+        if handle_comment_name_choice(chat_id, user_id, choice, sessions):
+            answer_callback(cb_id, "✅")
+            return
+        answer_callback(cb_id, "خطا")
+        return
+
+    # ===== callback امتیازدهی اولیه (دکمه ⭐ امتیاز به تعمیرکار) =====
     if data.startswith("rate:"):
         expert_id = int(data.split(":")[1])
         if start_rating(chat_id, user_id, expert_id, sessions, stage=0):
@@ -279,7 +309,7 @@ def handle_callback(cb):
             return
         answer_callback(cb_id, "خطا")
         return
-    
+
     # ===== callback نظرسنجی دوره‌ای =====
     if data.startswith("frate:"):
         expert_id = int(data.split(":")[1])
@@ -293,13 +323,13 @@ def handle_callback(cb):
             return
         answer_callback(cb_id, "خطا")
         return
-    
+
     # ===== callback وضعیت مغازه =====
     if data == "shop:open":
         set_shop_active(chat_id, user_id)
         answer_callback(cb_id, "✅")
         return
-    
+
     answer_callback(cb_id)
 
 
@@ -307,7 +337,7 @@ def handle_callback(cb):
 def main():
     print("Bot is starting...")
     print("Token:", TOKEN[:10] + "..." if len(TOKEN) > 10 else TOKEN)
-    
+
     try:
         from database import init_db, migrate_from_json
         init_db()
@@ -316,33 +346,33 @@ def main():
         print("Migration check done")
     except Exception as ex:
         print("DB init error:", str(ex)[:100])
-    
+
     try:
         delete_webhook()
         print("Webhook deleted")
     except:
         pass
-    
+
     me = get_me()
     if me:
         import config
         config.BOT_USERNAME = me.get("username", "")
         print("Bot username:", config.BOT_USERNAME)
-    
+
     try:
         clear_old_updates()
         print("Old updates cleared")
     except Exception as ex:
         print("Clear error:", str(ex)[:100])
-    
+
     offset = None
     last_followup = 0
     fail_count = 0
-    
+
     while True:
         try:
             now = time.time()
-            
+
             if now - last_followup > 60:
                 try:
                     check_followups()
@@ -350,10 +380,10 @@ def main():
                 except Exception as ex:
                     print("Followup error:", str(ex)[:100])
                 last_followup = now
-            
+
             updates = get_updates(offset)
             fail_count = 0
-            
+
             if updates.get("ok") and updates.get("result"):
                 for u in updates["result"]:
                     offset = u["update_id"] + 1
@@ -364,7 +394,7 @@ def main():
                             handle_callback(u["callback_query"])
                     except Exception as ex:
                         print("Handler error:", str(ex)[:100])
-        
+
         except Exception as ex:
             fail_count += 1
             print("Main loop error (" + str(fail_count) + "):", str(ex)[:100])
@@ -374,7 +404,7 @@ def main():
             else:
                 time.sleep(10)
             continue
-        
+
         time.sleep(2)
 
 
