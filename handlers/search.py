@@ -24,6 +24,7 @@ from db import (
     load_experts, create_job, is_shop_open,
     find_expert_by_id, get_feedback_id,
     get_expert_priority_penalty,
+    get_spec_rating_for_search, get_spec_reviews_count,
 )
 from utils import (
     parse_numbers, parse_single_number, parse_priorities,
@@ -33,7 +34,6 @@ from utils import (
 from handlers.register import get_subs_by_category, is_valid_category
 
 
-STAGE_DAYS = {0: 30, 1: 150}
 LOCATION_RADIUS_KM = 20
 
 
@@ -271,7 +271,7 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
                 labels = "، ".join([c["label"] for c in CRITERIA if c["key"] in data["priorities"]])
                 txt += "🎯 اولویت: " + labels + "\n\n"
             for i, e in enumerate(results, 1):
-                txt += format_expert_line(e, i, data.get("priorities", [])) + "\n"
+                txt += format_expert_line(e, i, data.get("priorities", []), data.get("sub")) + "\n"
             txt += "\nیکی را انتخاب کنید:"
             kb = {"inline_keyboard": []}
             for e in results:
@@ -387,7 +387,8 @@ def find_matching(category, sub, area, needs_onsite, priorities,
     else:
         result = all_match
 
-    result.sort(key=lambda x: _rank_score(x, priorities), reverse=True)
+    # رتبه‌بندی با در نظر گرفتن امتیاز تخصص
+    result.sort(key=lambda x: _rank_score(x, priorities, sub), reverse=True)
     return result[:3]
 
 
@@ -403,11 +404,25 @@ def _matches_times(e, handover):
     return True
 
 
-def _rank_score(e, priorities=None):
-    if priorities:
-        score = _priority_rating(e, priorities) * 40 + _overall_rating(e) * 10
+def _rank_score(e, priorities=None, specialty=None):
+    """
+    رتبه‌بندی بر اساس:
+    - امتیاز تخصص (اگه باشه) — وزن بالا
+    - امتیاز کلی
+    - اولویت‌های کاربر
+    - ویژه، حضوری
+    """
+    # امتیاز تخصص
+    if specialty:
+        spec_avg = get_spec_rating_for_search(e, specialty, fallback_to_overall=True)
     else:
-        score = _overall_rating(e) * 20
+        spec_avg = _overall_rating(e)
+
+    if priorities:
+        score = _priority_rating(e, priorities) * 30 + spec_avg * 50 + _overall_rating(e) * 10
+    else:
+        score = spec_avg * 40 + _overall_rating(e) * 15
+
     if e.get("is_premium"):
         score += 50
     if e.get("works_on_site"):
@@ -457,15 +472,26 @@ def _priority_rating(e, priorities):
     return total / count
 
 
-def format_expert_line(e, idx, priorities):
+def format_expert_line(e, idx, priorities, specialty=None):
     txt = "{}. 👤 ".format(idx) + e["name"] + "\n"
     txt += "   📞 " + e["phone"] + "\n"
     txt += "   📍 " + e["area"] + "\n"
-    txt += "   ⭐ " + "{:.1f}/5".format(_overall_rating(e))
-    if priorities:
-        txt += "   🎯 " + "{:.1f}".format(_priority_rating(e, priorities)) + "/5\n"
+
+    # امتیاز تخصص (اگه باشه) + امتیاز کلی
+    if specialty:
+        spec_avg = get_spec_rating_for_search(e, specialty, fallback_to_overall=False)
+        spec_count = get_spec_reviews_count(e, specialty)
+        if spec_count > 0:
+            txt += "   🎯 {}: {:.1f}/5 ({} نظر)\n".format(specialty, spec_avg, spec_count)
+            txt += "   ⭐ کلی: {:.1f}/5\n".format(_overall_rating(e))
+        else:
+            txt += "   ⭐ {:.1f}/5\n".format(_overall_rating(e))
     else:
-        txt += "\n"
+        txt += "   ⭐ {:.1f}/5\n".format(_overall_rating(e))
+
+    if priorities:
+        txt += "   🎯 اولویت: " + "{:.1f}".format(_priority_rating(e, priorities)) + "/5\n"
+
     if e.get("works_on_site"):
         txt += "   🏠 حضور در محل\n"
     return txt
@@ -483,17 +509,11 @@ def deliver_expert(chat_id, customer_id, expert, info, send_phone):
     if fid:
         msg += "\n\n💬 نظرات و پیشنهادات: " + fid
 
-    # پیام اصلی + دکمه امتیاز فوری
     send_message(chat_id, msg, kb_rate_expert(expert["user_id"]))
-
     notify_expert(expert, info, code, send_phone)
 
     if expert.get("lat") and expert.get("lng"):
-        send_message(
-            chat_id,
-            "📍 برای مسیریابی:",
-            kb_navigation(expert["lat"], expert["lng"])
-        )
+        send_message(chat_id, "📍 برای مسیریابی:", kb_navigation(expert["lat"], expert["lng"]))
 
 
 def notify_expert(expert, info, code, send_phone):
