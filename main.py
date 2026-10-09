@@ -30,7 +30,7 @@ def start_health_server():
 threading.Thread(target=start_health_server, daemon=True).start()
 
 
-# ==================== شروع ربات ادمین در thread ====================
+# ==================== شروع ربات ادمین ====================
 def start_admin_bot_thread():
     try:
         from admin_bot import run_admin_bot
@@ -48,7 +48,10 @@ from api import (
     send_message, answer_callback, get_me,
     get_updates, delete_webhook, clear_old_updates,
 )
-from keyboards import kb_main, kb_profile_location_send
+from keyboards import (
+    kb_main, kb_profile_location_send,
+    kb_device_log_menu,
+)
 from texts import (
     WELCOME, BTN_REGISTER, BTN_SEARCH_SIMPLE, BTN_SEARCH_ADVANCED,
     BTN_EXPERTS_LIST, BTN_MY_PROFILE, BTN_FEEDBACK, BTN_SHOP_STATUS,
@@ -56,6 +59,9 @@ from texts import (
     BTN_WALLET, BTN_CHARGE_WALLET,
     PROFILE_LOCATION_SAVED,
     BTN_BACK,
+    BTN_DEVICE_LOG, BTN_ADD_DEFECT, BTN_VIEW_DEVICE_LOGS,
+    BTN_MY_DEVICE_LOGS,
+    SEC_BLOCKED_PERMANENT, SEC_RATE_LIMIT,
 )
 
 # Handlers
@@ -80,6 +86,15 @@ from handlers.shop_status import (
     set_permanent_close, set_shop_active, check_shop_reactivations,
 )
 from handlers.feedback import handle_feedback as do_feedback
+from handlers.device_log import (
+    show_device_log_menu, start_add_defect, continue_add_defect,
+    show_logs_for_job, show_my_device_logs,
+    start_edit_log, continue_edit_log, do_delete_log,
+)
+from handlers.security import (
+    check_user_access, check_suspicious_text, check_rate_limit,
+)
+from handlers.retention import check_retention
 
 # DB
 from db import (
@@ -101,6 +116,19 @@ def handle_message(msg):
     location = msg.get("location")
 
     print(">>>", user_id, text[:30].encode("ascii", "replace").decode())
+
+    # ===== امنیت: چک مسدود بودن =====
+    if not check_user_access(chat_id, user_id):
+        return
+
+    # ===== امنیت: Rate limit =====
+    if not check_rate_limit(chat_id, user_id, max_count=15, window_seconds=60):
+        send_message(chat_id, SEC_RATE_LIMIT)
+        return
+
+    # ===== امنیت: متن مشکوک =====
+    if text and not check_suspicious_text(chat_id, user_id, text):
+        return
 
     # ===== عکس (رسید کیف پول) =====
     if "photo" in msg:
@@ -135,11 +163,7 @@ def handle_message(msg):
     if user_id in sessions:
         step = sessions[user_id].get("step", "")
 
-        # نظر متنی در حال نوشتن
-        if step == "chat_active":
-            pass
-
-        # ===== حالت‌های امتیازدهی =====
+        # ===== امتیازدهی =====
         if "rating" in sessions[user_id]:
             rating_data = sessions[user_id].get("rating", {})
             rstep = rating_data.get("step")
@@ -153,11 +177,19 @@ def handle_message(msg):
             if rstep == "ask_comment":
                 send_message(chat_id, "لطفاً از دکمه‌های بالا استفاده کنید.", kb_main())
                 return
-            # اگه در حال امتیازدهی ستاره‌ای هست، پیام متنی رو نادیده بگیر
             send_message(chat_id, "لطفاً از دکمه‌های ⭐ استفاده کنید یا بازگشت بزنید.", kb_main())
             return
 
-        # لوکیشن پروفایل - منتظر لوکیشن
+        # ===== لاگ عیوب =====
+        if step in ["devlog_job_code", "devlog_device", "devlog_defect"]:
+            if continue_add_defect(chat_id, user_id, text, sessions):
+                return
+
+        if step == "devlog_edit":
+            if continue_edit_log(chat_id, user_id, text, sessions):
+                return
+
+        # ===== لوکیشن پروفایل =====
         if step == "profile_location":
             if text == BTN_BACK:
                 sessions.pop(user_id, None)
@@ -166,7 +198,7 @@ def handle_message(msg):
             send_message(chat_id, "لطفاً موقعیت مکانی خود را ارسال کنید.", kb_profile_location_send())
             return
 
-        # شارژ کیف پول - مبلغ
+        # ===== کیف پول =====
         if step == "wallet_amount":
             if text == BTN_BACK:
                 sessions.pop(user_id, None)
@@ -175,7 +207,6 @@ def handle_message(msg):
             if handle_amount(chat_id, user_id, text, sessions):
                 return
 
-        # شارژ کیف پول - منتظر عکس
         if step == "wallet_receipt":
             if text == BTN_BACK:
                 sessions.pop(user_id, None)
@@ -184,17 +215,17 @@ def handle_message(msg):
             send_message(chat_id, "لطفاً عکس رسید را ارسال کنید.", kb_back())
             return
 
-        # ادامه ثبت‌نام
+        # ===== ثبت‌نام =====
         if step.startswith("reg_"):
             if continue_registration(chat_id, user_id, text, sessions):
                 return
 
-        # ادامه جستجو
+        # ===== جستجو =====
         if step.startswith("req_"):
             if continue_search(chat_id, user_id, text, sessions, search_modes):
                 return
 
-        # ادامه تعطیلی مغازه
+        # ===== مغازه =====
         if step.startswith("shop_"):
             if continue_shop_close(chat_id, user_id, text, sessions):
                 return
@@ -237,6 +268,20 @@ def handle_message(msg):
     if text == SHOP_CLOSED_PERM:
         set_permanent_close(chat_id, user_id); return
 
+    # ===== لاگ عیوب =====
+    if text == BTN_DEVICE_LOG:
+        show_device_log_menu(chat_id, user_id, sessions); return
+
+    if text == BTN_ADD_DEFECT:
+        start_add_defect(chat_id, user_id, sessions); return
+
+    if text == BTN_MY_DEVICE_LOGS:
+        show_my_device_logs(chat_id, user_id, sessions); return
+
+    if text == BTN_VIEW_DEVICE_LOGS:
+        # معادل BTN_MY_DEVICE_LOGS
+        show_my_device_logs(chat_id, user_id, sessions); return
+
     # ===== پیش‌فرض =====
     send_message(chat_id, USE_MENU, kb_main())
 
@@ -248,14 +293,19 @@ def handle_callback(cb):
     chat_id = cb.get("message", {}).get("chat", {}).get("id")
     data = cb.get("data", "")
 
-    # ===== callback ثبت لوکیشن از پروفایل =====
+    # ===== امنیت: چک مسدود =====
+    if not check_user_access(chat_id, user_id):
+        answer_callback(cb_id)
+        return
+
+    # ===== ثبت لوکیشن =====
     if data == "profile:set_location":
         sessions[user_id] = {"step": "profile_location", "data": {}}
         send_message(chat_id, "لطفاً موقعیت مکانی خود را ارسال کنید:", kb_profile_location_send())
         answer_callback(cb_id)
         return
 
-    # ===== callback تأیید شهر (Fuzzy) =====
+    # ===== Fuzzy city =====
     if data.startswith("cityfuzzy:"):
         action = data.split(":")[1]
         if handle_city_fuzzy_callback(chat_id, user_id, action, sessions):
@@ -264,7 +314,6 @@ def handle_callback(cb):
         answer_callback(cb_id, "خطا")
         return
 
-    # ===== callback چند شهر مشابه =====
     if data.startswith("citymulti:"):
         choice = data.split(":")[1]
         if handle_city_multiple_callback(chat_id, user_id, choice, sessions):
@@ -273,7 +322,7 @@ def handle_callback(cb):
         answer_callback(cb_id, "خطا")
         return
 
-    # ===== callback انتخاب تعمیرکار =====
+    # ===== انتخاب تعمیرکار =====
     if data.startswith("pick:"):
         expert_id = int(data.split(":")[1])
         if handle_pick_expert(chat_id, user_id, expert_id, sessions):
@@ -282,7 +331,7 @@ def handle_callback(cb):
         answer_callback(cb_id, "خطا")
         return
 
-    # ===== callback امتیازدهی (ستاره‌ها) =====
+    # ===== امتیازدهی (ستاره‌ها) =====
     if data.startswith("crit:"):
         parts = data.split(":")
         if len(parts) == 3:
@@ -294,9 +343,9 @@ def handle_callback(cb):
         answer_callback(cb_id, "خطا")
         return
 
-    # ===== callback نظر متنی: بله / رد =====
+    # ===== نظر متنی =====
     if data.startswith("comment:"):
-        choice = data.split(":")[1]  # yes / skip / named / anon
+        choice = data.split(":")[1]
         if choice in ["yes", "skip"]:
             if handle_comment_choice(chat_id, user_id, choice, sessions):
                 answer_callback(cb_id)
@@ -308,7 +357,7 @@ def handle_callback(cb):
         answer_callback(cb_id, "خطا")
         return
 
-    # ===== callback امتیازدهی اولیه (دکمه امتیاز فوری) =====
+    # ===== امتیاز فوری =====
     if data.startswith("rate:"):
         expert_id = int(data.split(":")[1])
         if start_rating(chat_id, user_id, expert_id, sessions, stage=0):
@@ -317,7 +366,7 @@ def handle_callback(cb):
         answer_callback(cb_id, "خطا")
         return
 
-    # ===== callback نظرسنجی دوره‌ای =====
+    # ===== نظرسنجی دوره‌ای =====
     if data.startswith("frate:"):
         expert_id = int(data.split(":")[1])
         job = get_pending_job(user_id, expert_id)
@@ -331,7 +380,39 @@ def handle_callback(cb):
         answer_callback(cb_id, "خطا")
         return
 
-    # ===== callback وضعیت مغازه =====
+    # ===== لاگ عیوب =====
+    if data.startswith("devlog:"):
+        parts = data.split(":")
+        sub = parts[1] if len(parts) > 1 else ""
+
+        if sub == "show":
+            job_code = parts[2]
+            show_logs_for_job(chat_id, user_id, job_code)
+            answer_callback(cb_id)
+            return
+
+        if sub == "edit":
+            log_id = int(parts[2])
+            start_edit_log(chat_id, user_id, log_id, sessions)
+            answer_callback(cb_id)
+            return
+
+        if sub == "del":
+            log_id = int(parts[2])
+            do_delete_log(chat_id, user_id, log_id)
+            answer_callback(cb_id)
+            return
+
+        if sub == "cancel":
+            answer_callback(cb_id, "لغو شد")
+            return
+
+        if sub == "back":
+            answer_callback(cb_id)
+            send_message(chat_id, USE_MENU, kb_main())
+            return
+
+    # ===== وضعیت مغازه =====
     if data == "shop:open":
         set_shop_active(chat_id, user_id)
         answer_callback(cb_id, "✅")
@@ -351,6 +432,9 @@ def main():
         print("Database initialized")
         migrate_from_json()
         print("Migration check done")
+        from db import refresh_cities_cache
+        count = refresh_cities_cache()
+        print("Cities cache loaded: {} cities".format(count))
     except Exception as ex:
         print("DB init error:", str(ex)[:100])
 
@@ -374,12 +458,14 @@ def main():
 
     offset = None
     last_followup = 0
+    last_retention = 0
     fail_count = 0
 
     while True:
         try:
             now = time.time()
 
+            # هر ۶۰ ثانیه: نظرسنجی + مغازه
             if now - last_followup > 60:
                 try:
                     check_followups()
@@ -387,6 +473,14 @@ def main():
                 except Exception as ex:
                     print("Followup error:", str(ex)[:100])
                 last_followup = now
+
+            # هر ۶۰ ثانیه چک: پاکسازی ۶ ماهه (خودش ۲۴ ساعته چک می‌کنه)
+            if now - last_retention > 60:
+                try:
+                    check_retention()
+                except Exception as ex:
+                    print("Retention error:", str(ex)[:100])
+                last_retention = now
 
             updates = get_updates(offset)
             fail_count = 0
