@@ -64,11 +64,12 @@ def init_db():
                 stage INTEGER DEFAULT 0,
                 sent_for_stage INTEGER DEFAULT 0,
                 info TEXT DEFAULT '{}',
-                rated_stages TEXT DEFAULT '[]'
+                rated_stages TEXT DEFAULT '[]',
+                device_name TEXT DEFAULT ''
             )
         """)
 
-        # جدول تنظیمات (key-value)
+        # جدول تنظیمات
         c.execute("""
             CREATE TABLE IF NOT EXISTS config (
                 key TEXT PRIMARY KEY,
@@ -140,15 +141,74 @@ def init_db():
             )
         """)
 
-        # Migration: اضافه کردن rated_stages به jobs (اگه قبلاً نبوده)
+        # جدول لاگ عیوب دستگاه
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS device_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_code TEXT,
+                expert_id INTEGER,
+                customer_id INTEGER,
+                device_name TEXT DEFAULT '',
+                defect_text TEXT DEFAULT '',
+                author_id INTEGER,
+                author_role TEXT,
+                created_at INTEGER,
+                updated_at INTEGER DEFAULT 0,
+                is_edited INTEGER DEFAULT 0,
+                old_text TEXT DEFAULT ''
+            )
+        """)
+
+        # جدول رویدادهای امنیتی
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS security_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                event_type TEXT,
+                details TEXT DEFAULT '',
+                created_at INTEGER
+            )
+        """)
+
+        # جدول کاربران مسدود
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS blocked_users (
+                user_id INTEGER PRIMARY KEY,
+                reason TEXT DEFAULT '',
+                blocked_by INTEGER,
+                blocked_at INTEGER,
+                blocked_until INTEGER DEFAULT 0
+            )
+        """)
+
+        # جدول تلاش‌های ورود ادمین
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS admin_login_attempts (
+                user_id INTEGER PRIMARY KEY,
+                attempts INTEGER DEFAULT 0,
+                last_attempt INTEGER,
+                locked_until INTEGER DEFAULT 0
+            )
+        """)
+
+        # ===== Migration: اضافه کردن ستون‌های جدید (اگه نبودن) =====
         try:
             c.execute("SELECT rated_stages FROM jobs LIMIT 1")
         except:
             try:
                 c.execute("ALTER TABLE jobs ADD COLUMN rated_stages TEXT DEFAULT '[]'")
-                print("Migration: added rated_stages column to jobs")
+                print("Migration: added rated_stages to jobs")
             except Exception as e:
-                print("Migration error:", str(e)[:100])
+                print("Migration rated_stages error:", str(e)[:100])
+
+        try:
+            c.execute("SELECT device_name FROM jobs LIMIT 1")
+        except:
+            try:
+                c.execute("ALTER TABLE jobs ADD COLUMN device_name TEXT DEFAULT ''")
+                print("Migration: added device_name to jobs")
+            except Exception as e:
+                print("Migration device_name error:", str(e)[:100])
 
         conn.commit()
         conn.close()
@@ -156,7 +216,6 @@ def init_db():
 
 # ==================== تعمیرکاران ====================
 def _row_to_expert(row):
-    """تبدیل ردیف دیتابیس به دیکشنری"""
     d = dict(row)
     d["sub_specialties"] = json.loads(d.get("sub_specialties") or "[]")
     d["ratings_by_stage"] = json.loads(d.get("ratings_by_stage") or "{}")
@@ -177,7 +236,6 @@ def load_all_experts():
 
 
 def save_all_experts(experts):
-    """جایگزینی کامل همه تعمیرکاران (برای سازگاری)"""
     with _lock:
         conn = get_conn()
         c = conn.cursor()
@@ -189,7 +247,6 @@ def save_all_experts(experts):
 
 
 def _insert_expert(c, e):
-    """درج یه تعمیرکار"""
     c.execute("""
         INSERT OR REPLACE INTO experts (
             user_id, name, phone, city, area, category, sub_specialties,
@@ -199,36 +256,25 @@ def _insert_expert(c, e):
             ratings_by_stage, wallet_balance, free_customers_used, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        e.get("user_id"),
-        e.get("name", ""),
-        e.get("phone", ""),
-        e.get("city", ""),
-        e.get("area", ""),
-        e.get("category", ""),
+        e.get("user_id"), e.get("name", ""), e.get("phone", ""),
+        e.get("city", ""), e.get("area", ""), e.get("category", ""),
         json.dumps(e.get("sub_specialties", []), ensure_ascii=False),
         1 if e.get("works_on_site") else 0,
-        int(e.get("response_speed", 0)),
-        int(e.get("repair_time", 0)),
-        e.get("lat"),
-        e.get("lng"),
+        int(e.get("response_speed", 0)), int(e.get("repair_time", 0)),
+        e.get("lat"), e.get("lng"),
         1 if e.get("active", True) else 0,
         1 if e.get("is_premium") else 0,
-        e.get("status", "pending"),
-        e.get("shop_status", "active"),
-        int(e.get("closed_from", 0)),
-        int(e.get("closed_until", 0)),
-        e.get("close_reason", ""),
-        e.get("expert_code", ""),
+        e.get("status", "pending"), e.get("shop_status", "active"),
+        int(e.get("closed_from", 0)), int(e.get("closed_until", 0)),
+        e.get("close_reason", ""), e.get("expert_code", ""),
         int(e.get("referral_count", 0)),
         json.dumps(e.get("ratings_by_stage", {}), ensure_ascii=False),
-        int(e.get("wallet_balance", 0)),
-        int(e.get("free_customers_used", 0)),
+        int(e.get("wallet_balance", 0)), int(e.get("free_customers_used", 0)),
         int(e.get("created_at", 0)),
     ))
 
 
 def upsert_expert(e):
-    """درج یا آپدیت یه تعمیرکار"""
     with _lock:
         conn = get_conn()
         c = conn.cursor()
@@ -248,13 +294,10 @@ def get_expert(user_id):
 
 
 def update_expert(user_id, field, value):
-    """آپدیت یه فیلد از تعمیرکار"""
-    # فیلدهای خاص
     if field in ["sub_specialties", "ratings_by_stage"]:
         value = json.dumps(value, ensure_ascii=False)
     elif field in ["works_on_site", "active", "is_premium"]:
         value = 1 if value else 0
-
     with _lock:
         conn = get_conn()
         c = conn.cursor()
@@ -306,21 +349,17 @@ def _insert_job(c, j):
         INSERT OR REPLACE INTO jobs (
             id, tracking_code, customer_id, customer_chat_id,
             expert_id, expert_name, created_at, next_at,
-            stage, sent_for_stage, info, rated_stages
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            stage, sent_for_stage, info, rated_stages, device_name
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        j.get("id", ""),
-        j.get("tracking_code", ""),
-        j.get("customer_id"),
-        j.get("customer_chat_id"),
-        j.get("expert_id"),
-        j.get("expert_name", ""),
-        int(j.get("created_at", 0)),
-        int(j.get("next_at", 0)),
-        int(j.get("stage", 0)),
-        int(j.get("sent_for_stage", 0)),
+        j.get("id", ""), j.get("tracking_code", ""),
+        j.get("customer_id"), j.get("customer_chat_id"),
+        j.get("expert_id"), j.get("expert_name", ""),
+        int(j.get("created_at", 0)), int(j.get("next_at", 0)),
+        int(j.get("stage", 0)), int(j.get("sent_for_stage", 0)),
         json.dumps(j.get("info", {}), ensure_ascii=False),
         json.dumps(j.get("rated_stages", []), ensure_ascii=False),
+        j.get("device_name", ""),
     ))
 
 
@@ -355,7 +394,6 @@ def find_job(customer_id, expert_id):
 
 
 def find_job_by_code(tracking_code):
-    """پیدا کردن job با کد پیگیری"""
     with _lock:
         conn = get_conn()
         c = conn.cursor()
@@ -363,6 +401,20 @@ def find_job_by_code(tracking_code):
         row = c.fetchone()
         conn.close()
         return _row_to_job(row) if row else None
+
+
+def delete_old_jobs(cutoff_timestamp):
+    """حذف پروژه‌های قدیمی‌تر از cutoff"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) as cnt FROM jobs WHERE created_at < ?", (cutoff_timestamp,))
+        row = c.fetchone()
+        count = row["cnt"] if row else 0
+        c.execute("DELETE FROM jobs WHERE created_at < ?", (cutoff_timestamp,))
+        conn.commit()
+        conn.close()
+        return count
 
 
 # ==================== تنظیمات ====================
@@ -398,35 +450,30 @@ def config_set(key, value):
         conn.close()
 
 
-# ==================== مهاجرت از JSON ====================
+# ==================== مهاجرت ====================
 def migrate_from_json():
-    """مهاجرت از فایل‌های JSON قدیمی به SQLite (فقط یه بار)"""
     import os
-
-    existing_experts = load_all_experts()
-    if existing_experts:
+    existing = load_all_experts()
+    if existing:
         return
-
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
                 experts = json.load(f)
                 if experts:
                     save_all_experts(experts)
-                    print("Migrated {} experts from JSON".format(len(experts)))
+                    print("Migrated {} experts".format(len(experts)))
         except Exception as e:
             print("Expert migration error:", str(e)[:100])
-
     if os.path.exists(JOBS_FILE):
         try:
             with open(JOBS_FILE, "r", encoding="utf-8") as f:
                 jobs = json.load(f)
                 if jobs:
                     save_all_jobs(jobs)
-                    print("Migrated {} jobs from JSON".format(len(jobs)))
+                    print("Migrated {} jobs".format(len(jobs)))
         except Exception as e:
             print("Job migration error:", str(e)[:100])
-
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -439,14 +486,13 @@ def migrate_from_json():
                     config_set("feedback_id", cfg["feedback_id"])
                 if cfg.get("tariffs"):
                     config_set("tariffs", cfg["tariffs"])
-                print("Migrated config from JSON")
+                print("Migrated config")
         except Exception as e:
             print("Config migration error:", str(e)[:100])
 
 
 # ==================== کیف پول ====================
 def create_wallet_request(expert_id, amount, receipt_message_id):
-    """ساخت درخواست شارژ کیف پول"""
     with _lock:
         conn = get_conn()
         c = conn.cursor()
@@ -506,9 +552,23 @@ def get_expert_wallet_history(expert_id, limit=10):
         return [dict(r) for r in rows]
 
 
+def delete_old_wallet_transactions(cutoff_timestamp):
+    """حذف تراکنش‌های قدیمی (فقط approved/rejected)"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""
+            DELETE FROM wallet_transactions
+            WHERE created_at < ? AND status != 'pending'
+        """, (cutoff_timestamp,))
+        count = c.rowcount
+        conn.commit()
+        conn.close()
+        return count
+
+
 # ==================== چت ====================
 def create_chat(expert_id, customer_id, job_code=""):
-    """ساخت چت جدید"""
     import time as _time
     with _lock:
         conn = get_conn()
@@ -525,7 +585,6 @@ def create_chat(expert_id, customer_id, job_code=""):
             conn.commit()
             conn.close()
             return chat_id
-
         now = int(_time.time())
         c.execute("""
             INSERT INTO chats
@@ -549,7 +608,6 @@ def get_chat(chat_id):
 
 
 def get_chat_between(expert_id, customer_id):
-    """گرفتن چت بین یه تعمیرکار و مشتری"""
     with _lock:
         conn = get_conn()
         c = conn.cursor()
@@ -573,7 +631,6 @@ def update_chat(chat_id, field, value):
 
 
 def add_message(chat_id, sender_id, sender_type, content, message_id=0, is_photo=0):
-    """اضافه کردن پیام"""
     import time as _time
     with _lock:
         conn = get_conn()
@@ -611,7 +668,6 @@ def get_chat_messages(chat_id, limit=20):
 
 
 def reset_unread(chat_id, user_type):
-    """صفر کردن unread"""
     with _lock:
         conn = get_conn()
         c = conn.cursor()
@@ -624,11 +680,9 @@ def reset_unread(chat_id, user_type):
 
 
 def get_expert_chats(expert_id, filter_type="all"):
-    """گرفتن چت‌های یه تعمیرکار"""
     with _lock:
         conn = get_conn()
         c = conn.cursor()
-
         if filter_type == "unread":
             c.execute("""
                 SELECT * FROM chats
@@ -636,15 +690,6 @@ def get_expert_chats(expert_id, filter_type="all"):
                 AND status = 'active' AND expert_unread > 0
                 ORDER BY last_message_at DESC
             """, (expert_id,))
-        elif filter_type == "today":
-            import time as _time
-            today_start = int(_time.time()) - 86400
-            c.execute("""
-                SELECT * FROM chats
-                WHERE expert_id = ? AND expert_hidden = 0
-                AND status = 'active' AND last_message_at >= ?
-                ORDER BY last_message_at DESC
-            """, (expert_id, today_start))
         else:
             c.execute("""
                 SELECT * FROM chats
@@ -658,11 +703,9 @@ def get_expert_chats(expert_id, filter_type="all"):
 
 
 def get_customer_chats(customer_id, filter_type="all"):
-    """گرفتن چت‌های یه مشتری"""
     with _lock:
         conn = get_conn()
         c = conn.cursor()
-
         if filter_type == "unread":
             c.execute("""
                 SELECT * FROM chats
@@ -685,7 +728,6 @@ def get_customer_chats(customer_id, filter_type="all"):
 # ==================== نظرات متنی ====================
 def add_comment(expert_id, customer_id, specialty, stage, stars, comment,
                 author_name="", is_anonymous=0):
-    """ذخیره یه نظر متنی"""
     import time as _time
     with _lock:
         conn = get_conn()
@@ -705,7 +747,6 @@ def add_comment(expert_id, customer_id, specialty, stage, stars, comment,
 
 
 def get_expert_comments(expert_id, limit=20):
-    """گرفتن نظرات یه تعمیرکار"""
     with _lock:
         conn = get_conn()
         c = conn.cursor()
@@ -721,7 +762,6 @@ def get_expert_comments(expert_id, limit=20):
 
 
 def get_expert_spec_comments(expert_id, specialty, limit=10):
-    """نظرات یه تعمیرکار برای یه تخصص خاص"""
     with _lock:
         conn = get_conn()
         c = conn.cursor()
@@ -737,7 +777,6 @@ def get_expert_spec_comments(expert_id, specialty, limit=10):
 
 
 def get_comment_count(expert_id):
-    """تعداد نظرات یه تعمیرکار"""
     with _lock:
         conn = get_conn()
         c = conn.cursor()
@@ -748,7 +787,6 @@ def get_comment_count(expert_id):
 
 
 def has_rated(expert_id, customer_id, stage):
-    """آیا این مشتری قبلاً به این تعمیرکار امتیاز داده (برای این مرحله)؟"""
     with _lock:
         conn = get_conn()
         c = conn.cursor()
@@ -759,3 +797,271 @@ def has_rated(expert_id, customer_id, stage):
         row = c.fetchone()
         conn.close()
         return row["cnt"] > 0 if row else False
+
+
+def delete_old_comments(cutoff_timestamp):
+    """حذف نظرات قدیمی"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("DELETE FROM comments WHERE created_at < ?", (cutoff_timestamp,))
+        count = c.rowcount
+        conn.commit()
+        conn.close()
+        return count
+
+
+# ==================== لاگ عیوب دستگاه ====================
+def add_device_log(job_code, expert_id, customer_id, device_name, defect_text,
+                   author_id, author_role):
+    import time as _time
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        now = int(_time.time())
+        c.execute("""
+            INSERT INTO device_logs
+            (job_code, expert_id, customer_id, device_name, defect_text,
+             author_id, author_role, created_at, updated_at, is_edited, old_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, '')
+        """, (job_code, expert_id, customer_id, device_name, defect_text,
+              author_id, author_role, now))
+        log_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        return log_id
+
+
+def get_device_logs(job_code):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""
+            SELECT * FROM device_logs
+            WHERE job_code = ?
+            ORDER BY created_at ASC
+        """, (job_code,))
+        rows = c.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+
+def get_device_log(log_id):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM device_logs WHERE id = ?", (log_id,))
+        row = c.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+
+def update_device_log(log_id, new_text):
+    import time as _time
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT defect_text FROM device_logs WHERE id = ?", (log_id,))
+        row = c.fetchone()
+        if not row:
+            conn.close()
+            return False
+        old_text = row["defect_text"]
+        now = int(_time.time())
+        c.execute("""
+            UPDATE device_logs
+            SET defect_text = ?, old_text = ?, updated_at = ?, is_edited = 1
+            WHERE id = ?
+        """, (new_text, old_text, now, log_id))
+        conn.commit()
+        conn.close()
+        return True
+
+
+def delete_device_log(log_id):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("DELETE FROM device_logs WHERE id = ?", (log_id,))
+        conn.commit()
+        conn.close()
+
+
+def get_customer_jobs_with_logs(customer_id, limit=10):
+    """پروژه‌های مشتری که لاگ عیب دارن"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""
+            SELECT DISTINCT j.* FROM jobs j
+            INNER JOIN device_logs dl ON dl.job_code = j.tracking_code
+            WHERE j.customer_id = ?
+            ORDER BY j.created_at DESC
+            LIMIT ?
+        """, (customer_id, limit))
+        rows = c.fetchall()
+        conn.close()
+        return [_row_to_job(r) for r in rows]
+
+
+def delete_old_device_logs(cutoff_timestamp):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("DELETE FROM device_logs WHERE created_at < ?", (cutoff_timestamp,))
+        count = c.rowcount
+        conn.commit()
+        conn.close()
+        return count
+
+
+# ==================== امنیت ====================
+def log_security_event(user_id, event_type, details=""):
+    import time as _time
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        now = int(_time.time())
+        c.execute("""
+            INSERT INTO security_events (user_id, event_type, details, created_at)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, event_type, details, now))
+        conn.commit()
+        conn.close()
+
+
+def get_recent_security_events(limit=50):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""
+            SELECT * FROM security_events
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (limit,))
+        rows = c.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+
+def is_user_blocked(user_id):
+    """آیا کاربر مسدود هست؟"""
+    import time as _time
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM blocked_users WHERE user_id = ?", (user_id,))
+        row = c.fetchone()
+        conn.close()
+        if not row:
+            return False
+        blocked_until = row["blocked_until"]
+        if blocked_until == 0:
+            return True  # دائم
+        return blocked_until > int(_time.time())
+
+
+def block_user(user_id, reason, blocked_by, duration_hours=0):
+    import time as _time
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        now = int(_time.time())
+        blocked_until = 0
+        if duration_hours > 0:
+            blocked_until = now + (duration_hours * 3600)
+        c.execute("""
+            INSERT OR REPLACE INTO blocked_users
+            (user_id, reason, blocked_by, blocked_at, blocked_until)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, reason, blocked_by, now, blocked_until))
+        conn.commit()
+        conn.close()
+
+
+def unblock_user(user_id):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("DELETE FROM blocked_users WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+
+
+def get_blocked_users():
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM blocked_users ORDER BY blocked_at DESC")
+        rows = c.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+
+def get_login_attempts(user_id):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM admin_login_attempts WHERE user_id = ?", (user_id,))
+        row = c.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+
+def record_login_attempt(user_id, success):
+    import time as _time
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        now = int(_time.time())
+        row = get_login_attempts(user_id)
+        if success:
+            # ریست
+            c.execute("""
+                INSERT OR REPLACE INTO admin_login_attempts
+                (user_id, attempts, last_attempt, locked_until)
+                VALUES (?, 0, ?, 0)
+            """, (user_id, now))
+        else:
+            attempts = (row.get("attempts", 0) if row else 0) + 1
+            locked_until = 0
+            if attempts >= 5:
+                locked_until = now + (15 * 60)  # ۱۵ دقیقه قفل
+                attempts = 0
+            c.execute("""
+                INSERT OR REPLACE INTO admin_login_attempts
+                (user_id, attempts, last_attempt, locked_until)
+                VALUES (?, ?, ?, ?)
+            """, (user_id, attempts, now, locked_until))
+        conn.commit()
+        conn.close()
+
+
+def is_login_locked(user_id):
+    import time as _time
+    row = get_login_attempts(user_id)
+    if not row:
+        return False
+    return row.get("locked_until", 0) > int(_time.time())
+
+
+def reset_login_attempts(user_id):
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("DELETE FROM admin_login_attempts WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+
+
+def cleanup_old_security_events(days=30):
+    import time as _time
+    cutoff = int(_time.time()) - (days * 86400)
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("DELETE FROM security_events WHERE created_at < ?", (cutoff,))
+        count = c.rowcount
+        conn.commit()
+        conn.close()
+        return count
