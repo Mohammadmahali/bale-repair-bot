@@ -12,6 +12,8 @@ from keyboards import (
     kb_admin, kb_back, kb_main,
     kb_edit_menu, kb_categories_list, kb_tariffs_list,
     kb_bulk_confirm,
+    kb_edit_cities_menu, kb_cities_delete_list, kb_cities_reset_confirm,
+    kb_security_menu, kb_blocked_user,
 )
 from texts import (
     ADM_TITLE, ADM_ASK_PASS, ADM_WRONG_PASS, ADM_NOT_AUTH,
@@ -35,6 +37,14 @@ from texts import (
     BTN_BULK_TARIFF,
     EDIT_BULK_TITLE, EDIT_BULK_ASK, EDIT_BULK_INVALID,
     EDIT_BULK_PREVIEW, EDIT_BULK_DONE, EDIT_BULK_CANCELED,
+    BTN_EDIT_CITIES,
+    EDIT_CITIES_TITLE, EDIT_CITIES_ASK_NEW,
+    EDIT_CITY_ADDED, EDIT_CITY_EXISTS, EDIT_CITY_REMOVED,
+    EDIT_CITY_NOT_FOUND, EDIT_CITY_INVALID,
+    EDIT_CITIES_LIST_TITLE, EDIT_CITIES_RESET,
+    EDIT_CITIES_RESET_OK, EDIT_CITIES_RESET_CONFIRM,
+    ADM_SECURITY, ADM_SEC_EVENTS, ADM_SEC_BLOCKED, ADM_SEC_BACK,
+    SEC_LOGIN_LOCKED, SEC_LOGIN_ATTEMPTS_LEFT,
 )
 from db import (
     get_operators, add_operator, remove_operator,
@@ -47,8 +57,15 @@ from db import (
     remove_category_db, add_sub_db, remove_sub_db,
     get_category_by_index, get_sub_by_index,
     get_sub_tariff, set_sub_tariff, get_all_sub_tariffs,
+    get_all_cities, add_city_db, remove_city_db,
+    reset_cities_db, refresh_cities_cache,
+    is_login_locked, record_login_attempt, reset_login_attempts,
 )
 from tariffs import preview_bulk, apply_bulk, get_current_tariffs
+from handlers.security import (
+    show_security_menu, show_security_events,
+    show_blocked_users, do_unblock_user,
+)
 import config
 
 
@@ -82,6 +99,15 @@ def handle_admin_start(chat_id, user_id):
         admin_send_message(chat_id, ADM_TITLE, kb_admin())
         return
 
+    # امنیت: قفل ورود
+    if is_login_locked(user_id):
+        from db import get_login_attempts
+        info = get_login_attempts(user_id)
+        locked_until = info.get("locked_until", 0) if info else 0
+        minutes = max(1, int((locked_until - time.time()) / 60) + 1)
+        admin_send_message(chat_id, SEC_LOGIN_LOCKED.format(minutes=minutes))
+        return
+
     pw = get_user_password(user_id)
     if pw is None:
         admin_user_states[user_id] = {"step": "adm_set_pass", "data": {}}
@@ -99,12 +125,10 @@ def handle_admin_message(msg):
 
     print("[ADMIN]", user_id, text[:30].encode("ascii", "replace").decode())
 
-    # /start
     if text == "/start":
         handle_admin_start(chat_id, user_id)
         return
 
-    # اگه authed هست
     if is_authed_admin(user_id):
         if text == ADM_EXIT:
             admin_sessions.discard(user_id)
@@ -125,6 +149,14 @@ def handle_admin_message(msg):
             show_operators(chat_id); return
         if text == ADM_CHANGE_PASS:
             ask_change_password(chat_id, user_id); return
+        if text == ADM_SECURITY:
+            show_security_menu(chat_id); return
+        if text == ADM_SEC_EVENTS:
+            show_security_events(chat_id); return
+        if text == ADM_SEC_BLOCKED:
+            show_blocked_users(chat_id); return
+        if text == ADM_SEC_BACK:
+            admin_send_message(chat_id, ADM_TITLE, kb_admin()); return
         if text == BTN_EDIT:
             show_edit_menu(chat_id); return
         if text == BTN_EDIT_CATEGORIES:
@@ -133,6 +165,17 @@ def handle_admin_message(msg):
             show_tariffs_list(chat_id); return
         if text == BTN_BULK_TARIFF:
             start_bulk_edit(chat_id, user_id); return
+        if text == BTN_EDIT_CITIES:
+            show_cities_menu(chat_id); return
+        if text == "➕ افزودن شهر":
+            admin_user_states[user_id] = {"step": "city_add", "data": {}}
+            admin_send_message(chat_id, EDIT_CITIES_ASK_NEW, kb_back())
+            return
+        if text == "🗑 حذف شهر":
+            show_cities_delete(chat_id, page=0); return
+        if text == EDIT_CITIES_RESET:
+            admin_send_message(chat_id, EDIT_CITIES_RESET_CONFIRM, kb_cities_reset_confirm())
+            return
         if text == BTN_EDIT_FEEDBACK:
             admin_user_states[user_id] = {"step": "edit_feedback", "data": {}}
             admin_send_message(chat_id, EDIT_FEEDBACK_ASK, kb_back())
@@ -153,7 +196,6 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, USE_MENU)
             return
 
-        # تنظیم رمز اول
         if step == "adm_set_pass":
             if len(text) < 4:
                 admin_send_message(chat_id, ADM_PASS_SHORT, kb_back())
@@ -176,18 +218,42 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, ADM_TITLE, kb_admin())
             return
 
-        # ورود با رمز
         if step == "adm_password":
+            # چک قفل
+            if is_login_locked(user_id):
+                from db import get_login_attempts
+                info = get_login_attempts(user_id)
+                locked_until = info.get("locked_until", 0) if info else 0
+                minutes = max(1, int((locked_until - time.time()) / 60) + 1)
+                admin_send_message(chat_id, SEC_LOGIN_LOCKED.format(minutes=minutes))
+                admin_user_states.pop(user_id, None)
+                return
+
             pw = get_user_password(user_id)
             if text == pw:
+                record_login_attempt(user_id, True)
+                reset_login_attempts(user_id)
                 admin_sessions.add(user_id)
                 admin_user_states.pop(user_id, None)
                 admin_send_message(chat_id, ADM_TITLE, kb_admin())
             else:
-                admin_send_message(chat_id, ADM_WRONG_PASS, kb_back())
+                record_login_attempt(user_id, False)
+                from db import get_login_attempts
+                info = get_login_attempts(user_id)
+                attempts = info.get("attempts", 0) if info else 0
+                left = max(0, 5 - attempts)
+                if is_login_locked(user_id):
+                    minutes = 15
+                    admin_send_message(chat_id, SEC_LOGIN_LOCKED.format(minutes=minutes))
+                    admin_user_states.pop(user_id, None)
+                else:
+                    admin_send_message(
+                        chat_id,
+                        ADM_WRONG_PASS + "\n" + SEC_LOGIN_ATTEMPTS_LEFT.format(left=left),
+                        kb_back()
+                    )
             return
 
-        # تغییر رمز
         if step == "adm_change_new":
             if len(text) < 4:
                 admin_send_message(chat_id, ADM_PASS_SHORT, kb_back())
@@ -208,7 +274,6 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, ADM_PASS_SET_OK, kb_admin())
             return
 
-        # افزودن اپراتور
         if step == "adm_add_op":
             try:
                 new_id = int(text.strip())
@@ -219,7 +284,6 @@ def handle_admin_message(msg):
                 admin_send_message(chat_id, INVALID_INPUT, kb_back())
             return
 
-        # ویرایش: افزودن دسته‌بندی
         if step == "edit_cat_add":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -236,7 +300,6 @@ def handle_admin_message(msg):
             admin_user_states.pop(user_id, None)
             return
 
-        # ویرایش: افزودن زیرتخصص
         if step == "edit_sub_add":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -259,30 +322,6 @@ def handle_admin_message(msg):
             admin_user_states.pop(user_id, None)
             return
 
-        # ویرایش: تعرفه جدید (قدیمی - برای سازگاری)
-        if step == "edit_tariff":
-            if text in [BTN_CANCEL, BTN_BACK]:
-                admin_user_states.pop(user_id, None)
-                show_edit_menu(chat_id)
-                return
-            try:
-                amount = int(text.strip().replace(",", "").replace("،", ""))
-                if amount < 10000 or amount > 10000000:
-                    raise ValueError
-            except:
-                admin_send_message(chat_id, EDIT_TARIFF_INVALID, kb_back())
-                return
-            cat = data.get("category", "")
-            cfg = load_admin_config()
-            tariffs = cfg.get("tariffs", {})
-            tariffs[cat] = amount
-            cfg["tariffs"] = tariffs
-            save_admin_config(cfg)
-            admin_user_states.pop(user_id, None)
-            admin_send_message(chat_id, EDIT_TARIFF_UPDATED.format(amount="{:,}".format(amount)), kb_edit_menu())
-            return
-
-        # ویرایش: تعرفه زیرتخصص
         if step == "edit_sub_tariff":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -293,7 +332,7 @@ def handle_admin_message(msg):
                 if amount < 10000 or amount > 10000000:
                     raise ValueError
             except:
-                admin_send_message(chat_id, "❌ مبلغ نامعتبر. یه عدد بین 10,000 تا 10,000,000 وارد کنید.", kb_back())
+                admin_send_message(chat_id, "❌ مبلغ نامعتبر.", kb_back())
                 return
             sub = data.get("sub", "")
             if sub:
@@ -308,7 +347,6 @@ def handle_admin_message(msg):
             admin_user_states.pop(user_id, None)
             return
 
-        # ویرایش: آیدی نظرات
         if step == "edit_feedback":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -324,7 +362,6 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, EDIT_FEEDBACK_UPDATED.format(id=new_id), kb_edit_menu())
             return
 
-        # ویرایش: شماره کارت
         if step == "edit_card_number":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -350,7 +387,6 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, EDIT_CARD_UPDATED.format(card=new_card, owner=new_owner), kb_edit_menu())
             return
 
-        # ویرایش کلی تعرفه (درصدی) - دریافت درصد
         if step == "edit_bulk_percent":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -386,7 +422,28 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, "لطفاً از دکمه‌های بالا استفاده کنید.", kb_bulk_confirm())
             return
 
-    # پیام نامشخص
+        if step == "city_add":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                admin_user_states.pop(user_id, None)
+                show_cities_menu(chat_id)
+                return
+            name = text.strip()
+            if not name or len(name) < 2 or len(name) > 30:
+                admin_send_message(chat_id, EDIT_CITY_INVALID, kb_back())
+                return
+            if add_city_db(name):
+                refresh_cities_cache()
+                count = len(get_all_cities())
+                admin_user_states.pop(user_id, None)
+                admin_send_message(
+                    chat_id,
+                    EDIT_CITY_ADDED.format(city=name) + "\n\n📊 تعداد فعلی: " + str(count),
+                    kb_edit_cities_menu()
+                )
+            else:
+                admin_send_message(chat_id, EDIT_CITY_EXISTS.format(city=name), kb_back())
+            return
+
     if is_admin(user_id):
         handle_admin_start(chat_id, user_id)
     else:
@@ -409,7 +466,7 @@ def handle_admin_callback(cb):
     parts = data.split(":")
     action = parts[1] if len(parts) > 1 else ""
 
-    # ===== تأیید/رد شارژ کیف پول =====
+    # ===== کیف پول =====
     if data.startswith("wadm:"):
         sub_action = parts[1]
         txn_id = int(parts[2])
@@ -422,7 +479,7 @@ def handle_admin_callback(cb):
         admin_answer_callback(cb_id)
         return
 
-    # ===== ویرایش کلی تعرفه‌ها - تأیید =====
+    # ===== ویرایش کلی تعرفه =====
     if data == "bulk:confirm":
         state = admin_user_states.get(user_id, {})
         percent = state.get("data", {}).get("percent")
@@ -439,11 +496,52 @@ def handle_admin_callback(cb):
         )
         return
 
-    # ===== ویرایش کلی تعرفه‌ها - انصراف =====
     if data == "bulk:cancel":
         admin_user_states.pop(user_id, None)
         admin_answer_callback(cb_id, "❌ لغو شد")
         admin_send_message(chat_id, EDIT_BULK_CANCELED, kb_edit_menu())
+        return
+
+    # ===== شهرها =====
+    if data.startswith("adm:citypage:"):
+        page = int(parts[2])
+        admin_answer_callback(cb_id)
+        show_cities_delete(chat_id, page)
+        return
+
+    if data.startswith("adm:citydel:"):
+        city_name = parts[2]
+        if remove_city_db(city_name):
+            refresh_cities_cache()
+            count = len(get_all_cities())
+            admin_answer_callback(cb_id, "حذف شد")
+            admin_send_message(
+                chat_id,
+                EDIT_CITY_REMOVED.format(city=city_name) + "\n\n📊 تعداد فعلی: " + str(count),
+                kb_cities_delete_list(page=0)
+            )
+        else:
+            admin_answer_callback(cb_id, "خطا")
+            admin_send_message(chat_id, EDIT_CITY_NOT_FOUND.format(city=city_name), kb_edit_cities_menu())
+        return
+
+    if data == "adm:cityreset:yes":
+        reset_cities_db()
+        refresh_cities_cache()
+        admin_answer_callback(cb_id, "✅ انجام شد")
+        admin_send_message(chat_id, EDIT_CITIES_RESET_OK, kb_edit_cities_menu())
+        return
+
+    if data == "adm:cityreset:no":
+        admin_answer_callback(cb_id, "لغو شد")
+        admin_send_message(chat_id, "لغو شد.", kb_edit_cities_menu())
+        return
+
+    # ===== رفع مسدودی =====
+    if data.startswith("adm:unblock:"):
+        target = int(parts[2])
+        do_unblock_user(chat_id, target)
+        admin_answer_callback(cb_id, "✅")
         return
 
     try:
@@ -548,7 +646,7 @@ def handle_admin_callback(cb):
     admin_answer_callback(cb_id)
 
 
-# ==================== نمایش آمار ====================
+# ==================== نمایش‌ها ====================
 def show_stats(chat_id):
     stats = get_stats()
     txt = "📊 آمار کلی ربات\n\n"
@@ -563,7 +661,6 @@ def show_stats(chat_id):
     admin_send_message(chat_id, txt, kb_admin())
 
 
-# ==================== لیست در انتظار ====================
 def show_pending_list(chat_id):
     pending = [e for e in load_experts() if e.get("status") == "pending"]
     if not pending:
@@ -617,7 +714,6 @@ def reject_expert(user_id, chat_id):
         pass
 
 
-# ==================== لیست متخصصین ====================
 def show_experts_list(chat_id):
     experts = [e for e in load_experts() if e.get("status", "approved") == "approved"]
     if not experts:
@@ -677,7 +773,6 @@ def remove_expert(expert_id, chat_id):
     admin_send_message(chat_id, ADM_DELETED, kb_admin())
 
 
-# ==================== آخرین معرفی‌ها ====================
 def show_jobs(chat_id):
     jobs = load_jobs()
     if not jobs:
@@ -689,7 +784,6 @@ def show_jobs(chat_id):
     admin_send_message(chat_id, txt, kb_admin())
 
 
-# ==================== درآمد ====================
 def show_revenue(chat_id):
     experts = load_experts()
     total_refs = sum(e.get("referral_count", 0) for e in experts)
@@ -700,7 +794,6 @@ def show_revenue(chat_id):
     admin_send_message(chat_id, txt, kb_admin())
 
 
-# ==================== مدیران ====================
 def show_operators(chat_id):
     operators = get_operators()
     txt = "👥 مدیران:\n\n"
@@ -730,30 +823,24 @@ def show_remove_operator(chat_id):
     admin_send_message(chat_id, "روی مدیر مورد نظر بزنید:", kb)
 
 
-# ==================== تغییر رمز ====================
 def ask_change_password(chat_id, user_id):
     admin_user_states[user_id] = {"step": "adm_change_new", "data": {}}
     admin_send_message(chat_id, ADM_ENTER_NEW_PASS, kb_back())
 
 
-# ==================== منوی ویرایش ====================
 def show_edit_menu(chat_id):
     admin_send_message(chat_id, "✏️ منوی ویرایش\n\nیکی از گزینه‌ها را انتخاب کنید:", kb_edit_menu())
 
 
 def show_categories_list(chat_id):
-    """نمایش لیست دسته‌بندی‌ها"""
     cats = get_all_categories()
-
     txt = "📂 مدیریت دسته‌بندی‌ها\n\n"
     kb = {"inline_keyboard": []}
-
     for idx, (cat, subs) in enumerate(cats.items()):
         txt += "{}. {} ({} زیرتخصص)\n".format(idx + 1, cat, len(subs))
         kb["inline_keyboard"].append([
             {"text": "✏️ " + cat, "callback_data": "adm:editcat:" + str(idx)}
         ])
-
     kb["inline_keyboard"].append([
         {"text": "➕ افزودن دسته جدید", "callback_data": "adm:addcat"}
     ])
@@ -764,12 +851,10 @@ def show_categories_list(chat_id):
 
 
 def show_category_detail(chat_id, cat_idx):
-    """نمایش جزئیات یه دسته"""
     cat = get_category_by_index(cat_idx)
     if not cat:
         admin_send_message(chat_id, "دسته پیدا نشد.", kb_edit_menu())
         return
-
     subs = get_category_subs(cat)
     txt = "📂 دسته: {}\n\n".format(cat)
     if subs:
@@ -777,7 +862,6 @@ def show_category_detail(chat_id, cat_idx):
             txt += "{}. {}\n".format(i, s)
     else:
         txt += "هنوز زیرتخصصی نداره.\n"
-
     kb = {"inline_keyboard": [
         [{"text": "➕ افزودن زیرتخصص", "callback_data": "adm:addsub:" + str(cat_idx)}],
         [{"text": "🗑 حذف زیرتخصص", "callback_data": "adm:delsublist:" + str(cat_idx)}],
@@ -788,17 +872,14 @@ def show_category_detail(chat_id, cat_idx):
 
 
 def show_subs_delete_list(chat_id, cat_idx):
-    """نمایش لیست زیرتخصص‌ها برای حذف"""
     cat = get_category_by_index(cat_idx)
     if not cat:
         admin_send_message(chat_id, "دسته پیدا نشد.", kb_edit_menu())
         return
-
     subs = get_category_subs(cat)
     if not subs:
         admin_send_message(chat_id, "زیرتخصصی برای حذف وجود نداره.", kb_edit_menu())
         return
-
     kb = {"inline_keyboard": []}
     for i, s in enumerate(subs):
         kb["inline_keyboard"].append([
@@ -811,60 +892,60 @@ def show_subs_delete_list(chat_id, cat_idx):
 
 
 def show_tariffs_list(chat_id):
-    """لیست دسته‌بندی‌ها برای ویرایش تعرفه"""
     cats = get_all_categories()
-
     txt = "💰 ویرایش تعرفه‌ها\n\n"
     txt += "یه دسته‌بندی رو انتخاب کنید تا تعرفه زیرتخصص‌هاش رو ببینید:\n\n"
-
     kb = {"inline_keyboard": []}
     for idx, (cat, subs) in enumerate(cats.items()):
         kb["inline_keyboard"].append([
             {"text": "💰 " + cat, "callback_data": "adm:tariffcat:" + str(idx)}
         ])
-
     kb["inline_keyboard"].append([
         {"text": BTN_BACK, "callback_data": "adm:backedit"}
     ])
-
     admin_send_message(chat_id, txt, kb)
 
 
 def show_sub_tariffs_list(chat_id, cat_idx):
-    """لیست زیرتخصص‌های یه دسته برای ویرایش تعرفه"""
     cat = get_category_by_index(cat_idx)
     if not cat:
         admin_send_message(chat_id, "دسته پیدا نشد.", kb_edit_menu())
         return
-
     subs = get_category_subs(cat)
     if not subs:
         admin_send_message(chat_id, "این دسته زیرتخصصی نداره.", kb_edit_menu())
         return
-
     txt = "💰 تعرفه‌های «{}»\n\n".format(cat)
     kb = {"inline_keyboard": []}
-
     for i, sub in enumerate(subs):
         tariff = get_sub_tariff(sub)
         txt += "• {}: {:,} تومان\n".format(sub, tariff)
         kb["inline_keyboard"].append([
             {"text": "✏️ {}".format(sub), "callback_data": "adm:tariffsub:" + str(cat_idx) + ":" + str(i)}
         ])
-
     kb["inline_keyboard"].append([
         {"text": BTN_BACK, "callback_data": "adm:edittarifflist"}
     ])
-
     admin_send_message(chat_id, txt, kb)
 
 
-# ==================== ویرایش کلی تعرفه ====================
 def start_bulk_edit(chat_id, user_id):
-    """شروع ویرایش کلی درصدی تعرفه‌ها"""
     admin_user_states[user_id] = {"step": "edit_bulk_percent", "data": {}}
     msg = EDIT_BULK_TITLE + "\n\n" + EDIT_BULK_ASK
     admin_send_message(chat_id, msg, kb_back())
+
+
+def show_cities_menu(chat_id):
+    count = len(get_all_cities())
+    txt = EDIT_CITIES_TITLE.format(count=count)
+    admin_send_message(chat_id, txt, kb_edit_cities_menu())
+
+
+def show_cities_delete(chat_id, page=0):
+    count = len(get_all_cities())
+    txt = EDIT_CITIES_LIST_TITLE + "\n\n📊 تعداد: " + str(count)
+    kb = kb_cities_delete_list(page=page)
+    admin_send_message(chat_id, txt, kb)
 
 
 # ==================== حلقه اصلی ====================
