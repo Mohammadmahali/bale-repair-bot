@@ -12,7 +12,6 @@ from texts import (
     FUZZY_CONFIRM, FUZZY_YES, FUZZY_NO, FUZZY_MULTIPLE,
     FUZZY_CITY_NOT_FOUND, FUZZY_LOCATION_HINT,
     BTN_NAV_NESHAN, BTN_NAV_GOOGLE,
-    BTN_CHAT_EXPERT,
 )
 from keyboards import (
     kb_categories, kb_yes_no, kb_back, kb_location,
@@ -155,7 +154,6 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
         send_message(chat_id, ASK_CUST_AREA, kb_location())
         return True
     
-    # ===== مرحله شهر =====
     if step == "req_area":
         city_input = text.strip()
         
@@ -169,11 +167,7 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
         similar = find_similar_cities(city_input)
         
         if not similar:
-            send_message(
-                chat_id,
-                FUZZY_CITY_NOT_FOUND.format(city=city_input),
-                kb_location()
-            )
+            send_message(chat_id, FUZZY_CITY_NOT_FOUND.format(city=city_input), kb_location())
             return True
         
         if len(similar) == 1:
@@ -422,15 +416,6 @@ def _rank_score(e, priorities=None):
     except:
         pass
     return score
-
-
-def _calculate_commission(expert, sub_specialty):
-    """محاسبه کمیسیون بر اساس زیرتخصص"""
-    try:
-        from db import get_sub_tariff
-        return get_sub_tariff(sub_specialty)
-    except:
-        return 50000
 
 
 def _overall_rating(e):
