@@ -16,12 +16,13 @@ from texts import (
     CUSTOMER_TOTAL, CUSTOMER_LAST, CUSTOMER_ITEM_HEADER,
     CUSTOMER_HISTORY_FOOTER,
     RATING_BY_SPEC, RATING_SPEC_LINE, RATING_NO_SPEC,
+    COMMENTS_HEADER, COMMENTS_NO, COMMENTS_ITEM, COMMENTS_ITEM_ANON,
 )
 from keyboards import kb_main, kb_share_link, kb_profile, kb_profile_location, kb_share_link_with_qr
 from api import send_message
 from db import (
     find_expert_by_id, is_shop_open, get_customer_history,
-    get_all_spec_ratings,
+    get_all_spec_ratings, get_expert_comments,
 )
 from utils import gen_expert_code
 from db import load_experts, save_experts
@@ -59,14 +60,20 @@ def calc_criteria_rating(expert, criteria_key):
 
 
 def count_reviews(expert):
-    max_count = 0
-    for cr in CRITERIA:
-        cnt = 0
-        for s in ["0", "1", "2"]:
-            r = expert.get("ratings_by_stage", {}).get(s, {}).get(cr["key"], {})
-            cnt += r.get("count", 0)
-        max_count = max(max_count, cnt)
-    return max_count
+    """تعداد نظرات واقعی (نه معیارها) — از جدول comments"""
+    try:
+        from db import get_comment_count
+        return get_comment_count(expert.get("user_id", 0))
+    except:
+        # fallback به روش قدیمی
+        max_count = 0
+        for cr in CRITERIA:
+            cnt = 0
+            for s in ["0", "1", "2"]:
+                r = expert.get("ratings_by_stage", {}).get(s, {}).get(cr["key"], {})
+                cnt += r.get("count", 0)
+            max_count = max(max_count, cnt)
+        return max_count
 
 
 def calc_stage_stats(expert, stage):
@@ -94,7 +101,7 @@ def rating_breakdown(expert):
 
 # ==================== امتیاز تفکیک‌شده ====================
 def rating_by_spec_section(expert):
-    """بخش امتیاز به تفکیک تخصص برای پروفایل"""
+    """بخش امتیاز به تفکیک تخصص"""
     spec_ratings = get_all_spec_ratings(expert)
 
     if not spec_ratings:
@@ -107,6 +114,46 @@ def rating_by_spec_section(expert):
             avg="{:.1f}".format(data["avg"]),
             count=data["count"]
         )
+    return txt
+
+
+# ==================== نظرات متنی ====================
+def comments_section(expert, limit=5):
+    """بخش نظرات متنی کاربران"""
+    try:
+        comments = get_expert_comments(expert.get("user_id"), limit)
+    except:
+        comments = []
+
+    # فیلتر: فقط اونایی که متن دارن
+    text_comments = [c for c in comments if (c.get("comment") or "").strip()]
+
+    if not text_comments:
+        return ""
+
+    txt = COMMENTS_HEADER
+    for c in text_comments:
+        stars = int(round(c.get("stars", 5)))
+        comment_text = c.get("comment", "")
+        created = c.get("created_at", 0)
+
+        # تاریخ شمسی ساده (روز/ماه/سال میلادی، برای سادگی)
+        date_str = time.strftime("%Y/%m/%d", time.localtime(created)) if created else ""
+
+        if c.get("is_anonymous"):
+            txt += COMMENTS_ITEM_ANON.format(
+                stars=stars,
+                comment=comment_text,
+                date=date_str,
+            )
+        else:
+            name = c.get("author_name") or "کاربر"
+            txt += COMMENTS_ITEM.format(
+                stars=stars,
+                name=name,
+                comment=comment_text,
+                date=date_str,
+            )
     return txt
 
 
@@ -127,7 +174,7 @@ def get_shop_label(expert):
     return SHOP_ACTIVE
 
 
-# ==================== نمایش پروفایل (تعمیرکار یا مشتری) ====================
+# ==================== نمایش پروفایل ====================
 def show_profile(chat_id, user_id):
     expert = find_expert_by_id(user_id)
     if not expert:
@@ -156,8 +203,11 @@ def show_profile(chat_id, user_id):
     txt += "\n" + LBL_REFERRAL + str(expert.get("referral_count", 0)) + "\n\n"
     txt += rating_breakdown(expert) + "\n"
 
-    # بخش جدید: امتیاز به تفکیک تخصص
+    # بخش امتیاز به تفکیک تخصص
     txt += rating_by_spec_section(expert)
+
+    # بخش نظرات متنی
+    txt += comments_section(expert)
 
     txt += "\n📊 مراحل نظرسنجی:\n"
     for st in [0, 1, 2]:
