@@ -44,7 +44,6 @@ from texts import (
     EDIT_CITIES_LIST_TITLE, EDIT_CITIES_RESET,
     EDIT_CITIES_RESET_OK, EDIT_CITIES_RESET_CONFIRM,
     ADM_SECURITY, ADM_SEC_EVENTS, ADM_SEC_BLOCKED, ADM_SEC_BACK,
-    SEC_LOGIN_LOCKED, SEC_LOGIN_ATTEMPTS_LEFT,
 )
 from db import (
     get_operators, add_operator, remove_operator,
@@ -59,7 +58,6 @@ from db import (
     get_sub_tariff, set_sub_tariff, get_all_sub_tariffs,
     get_all_cities, add_city_db, remove_city_db,
     reset_cities_db, refresh_cities_cache,
-    is_login_locked, record_login_attempt, reset_login_attempts,
 )
 from tariffs import preview_bulk, apply_bulk, get_current_tariffs
 from handlers.security import (
@@ -97,15 +95,6 @@ def handle_admin_start(chat_id, user_id):
 
     if is_authed_admin(user_id):
         admin_send_message(chat_id, ADM_TITLE, kb_admin())
-        return
-
-    # امنیت: قفل ورود
-    if is_login_locked(user_id):
-        from db import get_login_attempts
-        info = get_login_attempts(user_id)
-        locked_until = info.get("locked_until", 0) if info else 0
-        minutes = max(1, int((locked_until - time.time()) / 60) + 1)
-        admin_send_message(chat_id, SEC_LOGIN_LOCKED.format(minutes=minutes))
         return
 
     pw = get_user_password(user_id)
@@ -219,39 +208,13 @@ def handle_admin_message(msg):
             return
 
         if step == "adm_password":
-            # چک قفل
-            if is_login_locked(user_id):
-                from db import get_login_attempts
-                info = get_login_attempts(user_id)
-                locked_until = info.get("locked_until", 0) if info else 0
-                minutes = max(1, int((locked_until - time.time()) / 60) + 1)
-                admin_send_message(chat_id, SEC_LOGIN_LOCKED.format(minutes=minutes))
-                admin_user_states.pop(user_id, None)
-                return
-
             pw = get_user_password(user_id)
             if text == pw:
-                record_login_attempt(user_id, True)
-                reset_login_attempts(user_id)
                 admin_sessions.add(user_id)
                 admin_user_states.pop(user_id, None)
                 admin_send_message(chat_id, ADM_TITLE, kb_admin())
             else:
-                record_login_attempt(user_id, False)
-                from db import get_login_attempts
-                info = get_login_attempts(user_id)
-                attempts = info.get("attempts", 0) if info else 0
-                left = max(0, 5 - attempts)
-                if is_login_locked(user_id):
-                    minutes = 15
-                    admin_send_message(chat_id, SEC_LOGIN_LOCKED.format(minutes=minutes))
-                    admin_user_states.pop(user_id, None)
-                else:
-                    admin_send_message(
-                        chat_id,
-                        ADM_WRONG_PASS + "\n" + SEC_LOGIN_ATTEMPTS_LEFT.format(left=left),
-                        kb_back()
-                    )
+                admin_send_message(chat_id, ADM_WRONG_PASS, kb_back())
             return
 
         if step == "adm_change_new":
@@ -466,7 +429,6 @@ def handle_admin_callback(cb):
     parts = data.split(":")
     action = parts[1] if len(parts) > 1 else ""
 
-    # ===== کیف پول =====
     if data.startswith("wadm:"):
         sub_action = parts[1]
         txn_id = int(parts[2])
@@ -479,7 +441,6 @@ def handle_admin_callback(cb):
         admin_answer_callback(cb_id)
         return
 
-    # ===== ویرایش کلی تعرفه =====
     if data == "bulk:confirm":
         state = admin_user_states.get(user_id, {})
         percent = state.get("data", {}).get("percent")
@@ -502,7 +463,6 @@ def handle_admin_callback(cb):
         admin_send_message(chat_id, EDIT_BULK_CANCELED, kb_edit_menu())
         return
 
-    # ===== شهرها =====
     if data.startswith("adm:citypage:"):
         page = int(parts[2])
         admin_answer_callback(cb_id)
@@ -537,7 +497,6 @@ def handle_admin_callback(cb):
         admin_send_message(chat_id, "لغو شد.", kb_edit_cities_menu())
         return
 
-    # ===== رفع مسدودی =====
     if data.startswith("adm:unblock:"):
         target = int(parts[2])
         do_unblock_user(chat_id, target)
