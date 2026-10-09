@@ -17,14 +17,18 @@ from texts import (
     CUSTOMER_HISTORY_FOOTER,
     RATING_BY_SPEC, RATING_SPEC_LINE, RATING_NO_SPEC,
     COMMENTS_HEADER, COMMENTS_NO, COMMENTS_ITEM, COMMENTS_ITEM_ANON,
+    RETENTION_NOTICE,
 )
-from keyboards import kb_main, kb_share_link, kb_profile, kb_profile_location, kb_share_link_with_qr
+from keyboards import (
+    kb_main, kb_share_link, kb_profile,
+    kb_profile_location, kb_share_link_with_qr,
+)
 from api import send_message
 from db import (
     find_expert_by_id, is_shop_open, get_customer_history,
     get_all_spec_ratings, get_expert_comments,
 )
-from utils import gen_expert_code
+from utils import gen_expert_code, format_relative_time
 from db import load_experts, save_experts
 
 
@@ -60,12 +64,10 @@ def calc_criteria_rating(expert, criteria_key):
 
 
 def count_reviews(expert):
-    """تعداد نظرات واقعی (نه معیارها) — از جدول comments"""
     try:
         from db import get_comment_count
         return get_comment_count(expert.get("user_id", 0))
     except:
-        # fallback به روش قدیمی
         max_count = 0
         for cr in CRITERIA:
             cnt = 0
@@ -101,12 +103,9 @@ def rating_breakdown(expert):
 
 # ==================== امتیاز تفکیک‌شده ====================
 def rating_by_spec_section(expert):
-    """بخش امتیاز به تفکیک تخصص"""
     spec_ratings = get_all_spec_ratings(expert)
-
     if not spec_ratings:
         return "\n" + RATING_BY_SPEC + RATING_NO_SPEC + "\n"
-
     txt = "\n" + RATING_BY_SPEC
     for spec, data in spec_ratings.items():
         txt += RATING_SPEC_LINE.format(
@@ -119,15 +118,12 @@ def rating_by_spec_section(expert):
 
 # ==================== نظرات متنی ====================
 def comments_section(expert, limit=5):
-    """بخش نظرات متنی کاربران"""
     try:
         comments = get_expert_comments(expert.get("user_id"), limit)
     except:
         comments = []
 
-    # فیلتر: فقط اونایی که متن دارن
     text_comments = [c for c in comments if (c.get("comment") or "").strip()]
-
     if not text_comments:
         return ""
 
@@ -136,23 +132,17 @@ def comments_section(expert, limit=5):
         stars = int(round(c.get("stars", 5)))
         comment_text = c.get("comment", "")
         created = c.get("created_at", 0)
-
-        # تاریخ شمسی ساده (روز/ماه/سال میلادی، برای سادگی)
-        date_str = time.strftime("%Y/%m/%d", time.localtime(created)) if created else ""
+        date_str = format_relative_time(created)
 
         if c.get("is_anonymous"):
             txt += COMMENTS_ITEM_ANON.format(
-                stars=stars,
-                comment=comment_text,
-                date=date_str,
+                stars=stars, comment=comment_text, date=date_str,
             )
         else:
             name = c.get("author_name") or "کاربر"
             txt += COMMENTS_ITEM.format(
-                stars=stars,
-                name=name,
-                comment=comment_text,
-                date=date_str,
+                stars=stars, name=name,
+                comment=comment_text, date=date_str,
             )
     return txt
 
@@ -181,7 +171,6 @@ def show_profile(chat_id, user_id):
         show_customer_profile(chat_id, user_id)
         return
 
-    # پروفایل تعمیرکار
     txt = MY_PROFILE
     txt += LBL_NAME + " " + expert.get("name", "?") + "\n"
     txt += LBL_ROLE + " " + expert.get("category", "?") + "\n"
@@ -203,10 +192,7 @@ def show_profile(chat_id, user_id):
     txt += "\n" + LBL_REFERRAL + str(expert.get("referral_count", 0)) + "\n\n"
     txt += rating_breakdown(expert) + "\n"
 
-    # بخش امتیاز به تفکیک تخصص
     txt += rating_by_spec_section(expert)
-
-    # بخش نظرات متنی
     txt += comments_section(expert)
 
     txt += "\n📊 مراحل نظرسنجی:\n"
@@ -230,7 +216,6 @@ def show_profile(chat_id, user_id):
 
 # ==================== پروفایل مشتری ====================
 def show_customer_profile(chat_id, user_id):
-    """نمایش تاریخچه درخواست‌های مشتری"""
     jobs = get_customer_history(user_id, 10)
 
     if not jobs:
@@ -243,27 +228,14 @@ def show_customer_profile(chat_id, user_id):
 
     last_time = jobs[0].get("created_at", 0)
     if last_time:
-        days_ago = int((time.time() - last_time) / 86400)
-        if days_ago == 0:
-            last_str = "امروز"
-        elif days_ago == 1:
-            last_str = "دیروز"
-        else:
-            last_str = "{} روز پیش".format(days_ago)
-        txt += CUSTOMER_LAST + last_str + "\n"
+        txt += CUSTOMER_LAST + format_relative_time(last_time) + "\n"
 
     txt += "\n"
 
     for j in jobs[:10]:
         info = j.get("info", {})
         created = j.get("created_at", 0)
-        days_ago = int((time.time() - created) / 86400)
-        if days_ago == 0:
-            date_str = "امروز"
-        elif days_ago == 1:
-            date_str = "دیروز"
-        else:
-            date_str = "{} روز پیش".format(days_ago)
+        date_str = format_relative_time(created)
 
         txt += CUSTOMER_ITEM_HEADER
         txt += "📅 " + date_str + "\n"
@@ -303,7 +275,7 @@ def _build_expert_link(code):
     return "https://ble.ir/yourbot?start=" + code
 
 
-# ==================== ذخیره لوکیشن از پروفایل ====================
+# ==================== ذخیره لوکیشن ====================
 def handle_profile_location(chat_id, user_id, location):
     experts = load_experts()
     for e in experts:
