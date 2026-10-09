@@ -572,3 +572,118 @@ def get_all_sub_tariffs():
     result = dict(SUB_TARIFFS)
     result.update(user_tariffs)
     return result
+# ==================== امتیازدهی تفکیک‌شده بر تخصص ====================
+def add_spec_rating(expert_id, specialty, stage, criteria_key, stars):
+    """ثبت امتیاز برای یه تخصص خاص (داخل ratings_by_stage.by_spec)"""
+    e = find_expert_by_id(expert_id)
+    if not e:
+        return False
+
+    ratings_by_stage = e.get("ratings_by_stage", {})
+    by_spec = ratings_by_stage.setdefault("by_spec", {})
+    spec_data = by_spec.setdefault(specialty, {})
+    stage_data = spec_data.setdefault(str(stage), {})
+    cell = stage_data.setdefault(criteria_key, {"sum": 0, "count": 0})
+    cell["sum"] += stars
+    cell["count"] += 1
+
+    update_expert_field(expert_id, "ratings_by_stage", ratings_by_stage)
+    return True
+
+
+def calc_spec_rating(expert, specialty):
+    """
+    محاسبه میانگین امتیاز یه تخصص خاص
+    return: float یا None (اگه نظری برای این تخصص نباشه)
+    """
+    from texts import CRITERIA
+
+    by_spec = expert.get("ratings_by_stage", {}).get("by_spec", {})
+    spec_data = by_spec.get(specialty, {})
+
+    if not spec_data:
+        return None
+
+    total = 0
+    count = 0
+    for cr in CRITERIA:
+        rt = 0
+        rc = 0
+        for s in ["0", "1", "2"]:
+            r = spec_data.get(s, {}).get(cr["key"], {})
+            rt += r.get("sum", 0)
+            rc += r.get("count", 0)
+        if rc > 0:
+            total += rt / rc
+            count += 1
+
+    if count == 0:
+        return None
+    return total / count
+
+
+def get_spec_reviews_count(expert, specialty):
+    """تعداد نظرات ثبت‌شده برای یه تخصص خاص"""
+    from texts import CRITERIA
+
+    by_spec = expert.get("ratings_by_stage", {}).get("by_spec", {})
+    spec_data = by_spec.get(specialty, {})
+
+    max_count = 0
+    for cr in CRITERIA:
+        cnt = 0
+        for s in ["0", "1", "2"]:
+            r = spec_data.get(s, {}).get(cr["key"], {})
+            cnt += r.get("count", 0)
+        max_count = max(max_count, cnt)
+    return max_count
+
+
+def get_all_spec_ratings(expert):
+    """
+    گرفتن همه امتیازهای تفکیک‌شده بر اساس تخصص
+    return: {spec_name: {"avg": float, "count": int}, ...}
+    """
+    by_spec = expert.get("ratings_by_stage", {}).get("by_spec", {})
+    result = {}
+    for spec in by_spec.keys():
+        avg = calc_spec_rating(expert, spec)
+        cnt = get_spec_reviews_count(expert, spec)
+        if avg is not None and cnt > 0:
+            result[spec] = {"avg": avg, "count": cnt}
+    # مرتب‌سازی بر اساس تعداد نظرات (نزولی)
+    result = dict(sorted(result.items(), key=lambda x: x[1]["count"], reverse=True))
+    return result
+
+
+def get_spec_rating_for_search(expert, specialty, fallback_to_overall=True):
+    """
+    امتیاز مخصوص یه تخصص برای استفاده توی رتبه‌بندی جستجو
+    اگه امتیاز مخصوص نبود و fallback فعال باشه، امتیاز کلی رو برمی‌گردونه
+    """
+    spec_avg = calc_spec_rating(expert, specialty)
+    if spec_avg is not None:
+        return spec_avg
+    if fallback_to_overall:
+        return _calc_overall_rating(expert)
+    return 5.0
+
+
+def _calc_overall_rating(expert):
+    """محاسبه امتیاز کلی (کمکی)"""
+    from texts import CRITERIA
+    total = 0
+    count = 0
+    for cr in CRITERIA:
+        rt = 0
+        rc = 0
+        for s in ["0", "1", "2"]:
+            r = expert.get("ratings_by_stage", {}).get(s, {}).get(cr["key"], {})
+            rt += r.get("sum", 0)
+            rc += r.get("count", 0)
+        if rc > 0:
+            total += rt / rc
+            count += 1
+    if count == 0:
+        return 5.0
+    return total / count
