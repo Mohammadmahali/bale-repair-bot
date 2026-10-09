@@ -63,7 +63,8 @@ def init_db():
                 next_at INTEGER,
                 stage INTEGER DEFAULT 0,
                 sent_for_stage INTEGER DEFAULT 0,
-                info TEXT DEFAULT '{}'
+                info TEXT DEFAULT '{}',
+                rated_stages TEXT DEFAULT '[]'
             )
         """)
 
@@ -122,6 +123,32 @@ def init_db():
                 created_at INTEGER
             )
         """)
+
+        # جدول نظرات متنی
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                expert_id INTEGER,
+                customer_id INTEGER,
+                specialty TEXT DEFAULT '',
+                stage INTEGER DEFAULT 0,
+                stars REAL DEFAULT 0,
+                comment TEXT DEFAULT '',
+                author_name TEXT DEFAULT '',
+                is_anonymous INTEGER DEFAULT 0,
+                created_at INTEGER DEFAULT 0
+            )
+        """)
+
+        # Migration: اضافه کردن rated_stages به jobs (اگه قبلاً نبوده)
+        try:
+            c.execute("SELECT rated_stages FROM jobs LIMIT 1")
+        except:
+            try:
+                c.execute("ALTER TABLE jobs ADD COLUMN rated_stages TEXT DEFAULT '[]'")
+                print("Migration: added rated_stages column to jobs")
+            except Exception as e:
+                print("Migration error:", str(e)[:100])
 
         conn.commit()
         conn.close()
@@ -249,6 +276,7 @@ def delete_expert_db(user_id):
 def _row_to_job(row):
     d = dict(row)
     d["info"] = json.loads(d.get("info") or "{}")
+    d["rated_stages"] = json.loads(d.get("rated_stages") or "[]")
     return d
 
 
@@ -278,8 +306,8 @@ def _insert_job(c, j):
         INSERT OR REPLACE INTO jobs (
             id, tracking_code, customer_id, customer_chat_id,
             expert_id, expert_name, created_at, next_at,
-            stage, sent_for_stage, info
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            stage, sent_for_stage, info, rated_stages
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         j.get("id", ""),
         j.get("tracking_code", ""),
@@ -292,6 +320,7 @@ def _insert_job(c, j):
         int(j.get("stage", 0)),
         int(j.get("sent_for_stage", 0)),
         json.dumps(j.get("info", {}), ensure_ascii=False),
+        json.dumps(j.get("rated_stages", []), ensure_ascii=False),
     ))
 
 
@@ -305,7 +334,7 @@ def upsert_job(j):
 
 
 def update_job(job_id, field, value):
-    if field == "info":
+    if field in ["info", "rated_stages"]:
         value = json.dumps(value, ensure_ascii=False)
     with _lock:
         conn = get_conn()
@@ -320,6 +349,17 @@ def find_job(customer_id, expert_id):
         conn = get_conn()
         c = conn.cursor()
         c.execute("SELECT * FROM jobs WHERE customer_id = ? AND expert_id = ? ORDER BY created_at DESC", (customer_id, expert_id))
+        row = c.fetchone()
+        conn.close()
+        return _row_to_job(row) if row else None
+
+
+def find_job_by_code(tracking_code):
+    """پیدا کردن job با کد پیگیری"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT * FROM jobs WHERE tracking_code = ?", (tracking_code,))
         row = c.fetchone()
         conn.close()
         return _row_to_job(row) if row else None
@@ -363,12 +403,10 @@ def migrate_from_json():
     """مهاجرت از فایل‌های JSON قدیمی به SQLite (فقط یه بار)"""
     import os
 
-    # چک کن دیتابیس خالی هست
     existing_experts = load_all_experts()
     if existing_experts:
-        return  # قبلاً مهاجرت شده
+        return
 
-    # مهاجرت تعمیرکاران
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
@@ -379,7 +417,6 @@ def migrate_from_json():
         except Exception as e:
             print("Expert migration error:", str(e)[:100])
 
-    # مهاجرت پروژه‌ها
     if os.path.exists(JOBS_FILE):
         try:
             with open(JOBS_FILE, "r", encoding="utf-8") as f:
@@ -390,7 +427,6 @@ def migrate_from_json():
         except Exception as e:
             print("Job migration error:", str(e)[:100])
 
-    # مهاجرت تنظیمات
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -477,7 +513,6 @@ def create_chat(expert_id, customer_id, job_code=""):
     with _lock:
         conn = get_conn()
         c = conn.cursor()
-        # چک کن قبلاً چت بین این دو نفر هست
         c.execute("""
             SELECT id FROM chats
             WHERE expert_id = ? AND customer_id = ?
@@ -486,7 +521,6 @@ def create_chat(expert_id, customer_id, job_code=""):
         row = c.fetchone()
         if row:
             chat_id = row["id"]
-            # بازش کن اگه بسته بود
             c.execute("UPDATE chats SET status = 'active' WHERE id = ?", (chat_id,))
             conn.commit()
             conn.close()
@@ -551,9 +585,7 @@ def add_message(chat_id, sender_id, sender_type, content, message_id=0, is_photo
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (chat_id, sender_id, sender_type, content, message_id, is_photo, now))
         msg_id = c.lastrowid
-        # آپدیت chat
         c.execute("UPDATE chats SET last_message_at = ? WHERE id = ?", (now, chat_id))
-        # زیاد کردن unread
         if sender_type == "expert":
             c.execute("UPDATE chats SET customer_unread = customer_unread + 1 WHERE id = ?", (chat_id,))
         else:
@@ -648,3 +680,82 @@ def get_customer_chats(customer_id, filter_type="all"):
         rows = c.fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+
+# ==================== نظرات متنی ====================
+def add_comment(expert_id, customer_id, specialty, stage, stars, comment,
+                author_name="", is_anonymous=0):
+    """ذخیره یه نظر متنی"""
+    import time as _time
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        now = int(_time.time())
+        c.execute("""
+            INSERT INTO comments
+            (expert_id, customer_id, specialty, stage, stars, comment,
+             author_name, is_anonymous, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (expert_id, customer_id, specialty, stage, stars, comment,
+              author_name, is_anonymous, now))
+        comment_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        return comment_id
+
+
+def get_expert_comments(expert_id, limit=20):
+    """گرفتن نظرات یه تعمیرکار"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""
+            SELECT * FROM comments
+            WHERE expert_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (expert_id, limit))
+        rows = c.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+
+def get_expert_spec_comments(expert_id, specialty, limit=10):
+    """نظرات یه تعمیرکار برای یه تخصص خاص"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""
+            SELECT * FROM comments
+            WHERE expert_id = ? AND specialty = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (expert_id, specialty, limit))
+        rows = c.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+
+def get_comment_count(expert_id):
+    """تعداد نظرات یه تعمیرکار"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) as cnt FROM comments WHERE expert_id = ?", (expert_id,))
+        row = c.fetchone()
+        conn.close()
+        return row["cnt"] if row else 0
+
+
+def has_rated(expert_id, customer_id, stage):
+    """آیا این مشتری قبلاً به این تعمیرکار امتیاز داده (برای این مرحله)؟"""
+    with _lock:
+        conn = get_conn()
+        c = conn.cursor()
+        c.execute("""
+            SELECT COUNT(*) as cnt FROM comments
+            WHERE expert_id = ? AND customer_id = ? AND stage = ?
+        """, (expert_id, customer_id, stage))
+        row = c.fetchone()
+        conn.close()
+        return row["cnt"] > 0 if row else False
