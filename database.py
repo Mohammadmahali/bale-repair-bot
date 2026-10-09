@@ -1025,8 +1025,8 @@ def record_login_attempt(user_id, success):
         else:
             attempts = (row.get("attempts", 0) if row else 0) + 1
             locked_until = 0
-            if attempts >= 5:
-                locked_until = now + (15 * 60)  # ۱۵ دقیقه قفل
+            if attempts >= 10:
+                locked_until = now + (3 * 60)  # ۱۵ دقیقه قفل
                 attempts = 0
             c.execute("""
                 INSERT OR REPLACE INTO admin_login_attempts
