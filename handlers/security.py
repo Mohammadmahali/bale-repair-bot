@@ -3,11 +3,15 @@
 سیستم امنیت:
 - بررسی مسدود بودن کاربر
 - بررسی متن مشکوک (لینک، تبلیغات)
-- Rate limit برای پیام‌های تکراری
+- Rate limit (با معافیت ادمین)
 - قفل ورود ادمین (brute force)
 - لاگ رویدادهای امنیتی
+
+⚠️ همه توابع اصلی داخل try/except هستن که اگه خطا دادن،
+    ربات کرش نکنه و پیام‌ها رد نشن.
 """
 import time
+from config import SUPER_ADMIN
 from texts import (
     SEC_SUSPICIOUS_MSG, SEC_BLOCKED_PERMANENT, SEC_BLOCKED_TEMP,
     SEC_LOGIN_LOCKED, SEC_LOGIN_ATTEMPTS_LEFT,
@@ -23,103 +27,152 @@ from db import (
     get_blocked_users, is_login_locked,
     record_login_attempt, reset_login_attempts,
     log_security_event, get_recent_security_events,
-    find_expert_by_id,
+    find_expert_by_id, get_operators,
 )
 from utils import is_suspicious_text, format_relative_time
 
 
 # ==================== Rate Limit State ====================
-_rate_limit_store = {}  # {user_id: [timestamps]}
+_rate_limit_store = {}
+
+
+def _is_admin(user_id):
+    """آیا ادمین هست؟ (که rate limit و ... روش اعمال نشه)"""
+    try:
+        if user_id == SUPER_ADMIN:
+            return True
+        return user_id in get_operators()
+    except:
+        return False
 
 
 # ==================== بررسی دسترسی ====================
 def check_user_access(chat_id, user_id):
     """
     آیا کاربر اجازه استفاده داره؟
-    Return: True اگه مسدود نیست، False اگه مسدود هست (پیام فرستاده می‌شه)
+    Return: True اگه مسدود نیست
     """
-    if not is_user_blocked(user_id):
+    try:
+        # ادمین‌ها هرگز مسدود نمی‌شن
+        if _is_admin(user_id):
+            return True
+
+        if not is_user_blocked(user_id):
+            return True
+
+        blocked = get_blocked_users()
+        info = None
+        for b in blocked:
+            if b.get("user_id") == user_id:
+                info = b
+                break
+
+        if not info:
+            return True
+
+        reason = info.get("reason", "نامشخص")
+        until = info.get("blocked_until", 0)
+
+        if until == 0:
+            send_message(chat_id, SEC_BLOCKED_PERMANENT.format(reason=reason))
+        else:
+            until_str = time.strftime("%Y/%m/%d - %H:%M", time.localtime(until))
+            send_message(chat_id, SEC_BLOCKED_TEMP.format(reason=reason, until=until_str))
+        return False
+    except Exception as ex:
+        # اگه خطا داد، بذار پیام رد بشه
+        print("[SECURITY] check_user_access error:", str(ex)[:100])
         return True
-
-    from db import get_blocked_users
-    blocked = get_blocked_users()
-    info = None
-    for b in blocked:
-        if b.get("user_id") == user_id:
-            info = b
-            break
-
-    if not info:
-        return True
-
-    reason = info.get("reason", "نامشخص")
-    until = info.get("blocked_until", 0)
-
-    if until == 0:
-        send_message(chat_id, SEC_BLOCKED_PERMANENT.format(reason=reason))
-    else:
-        until_str = time.strftime("%Y/%m/%d - %H:%M", time.localtime(until))
-        send_message(chat_id, SEC_BLOCKED_TEMP.format(reason=reason, until=until_str))
-    return False
 
 
 # ==================== بررسی متن مشکوک ====================
 def check_suspicious_text(chat_id, user_id, text):
     """
-    بررسی متن مشکوک
-    Return: True اگه OK، False اگه مشکوک (پیام فرستاده شده)
+    Return: True اگه OK، False اگه مشکوک
     """
-    if not text:
-        return True
+    try:
+        if not text:
+            return True
 
-    if is_suspicious_text(text):
-        log_security_event(user_id, "suspicious_text", text[:100])
-        send_message(chat_id, SEC_SUSPICIOUS_MSG)
-        return False
-    return True
+        # ادمین‌ها بررسی نمی‌شن
+        if _is_admin(user_id):
+            return True
+
+        if is_suspicious_text(text):
+            try:
+                log_security_event(user_id, "suspicious_text", text[:100])
+            except:
+                pass
+            send_message(chat_id, SEC_SUSPICIOUS_MSG)
+            return False
+        return True
+    except Exception as ex:
+        print("[SECURITY] check_suspicious_text error:", str(ex)[:100])
+        return True
 
 
 # ==================== Rate Limit ====================
-def check_rate_limit(chat_id, user_id, max_count=10, window_seconds=60):
+def check_rate_limit(chat_id, user_id, max_count=60, window_seconds=60):
     """
-    بررسی rate limit
     Return: True اگه OK، False اگه زیاده
+    - ادمین‌ها معاف هستن
+    - پیش‌فرض: ۶۰ پیام در ۶۰ ثانیه (خیلی سخاوتمندانه)
     """
-    now = int(time.time())
-    times = _rate_limit_store.get(user_id, [])
-    cutoff = now - window_seconds
-    times = [t for t in times if t > cutoff]
+    try:
+        # ادمین‌ها معاف
+        if _is_admin(user_id):
+            return True
 
-    if len(times) >= max_count:
-        log_security_event(user_id, "rate_limit_exceeded", str(len(times)))
-        return False
+        now = int(time.time())
+        times = _rate_limit_store.get(user_id, [])
+        cutoff = now - window_seconds
+        times = [t for t in times if t > cutoff]
 
-    times.append(now)
-    _rate_limit_store[user_id] = times
-    return True
+        if len(times) >= max_count:
+            try:
+                log_security_event(user_id, "rate_limit_exceeded", str(len(times)))
+            except:
+                pass
+            return False
+
+        times.append(now)
+        _rate_limit_store[user_id] = times
+        return True
+    except Exception as ex:
+        print("[SECURITY] check_rate_limit error:", str(ex)[:100])
+        return True
 
 
 # ==================== قفل ورود ادمین ====================
 def check_admin_login_locked(chat_id, user_id):
     """آیا ورود ادمین قفل هست؟"""
-    if not is_login_locked(user_id):
-        return False
+    try:
+        if not is_login_locked(user_id):
+            return False
 
-    from db import get_login_attempts
-    info = get_login_attempts(user_id)
-    locked_until = info.get("locked_until", 0) if info else 0
-    minutes = max(1, int((locked_until - time.time()) / 60) + 1)
-    send_message(chat_id, SEC_LOGIN_LOCKED.format(minutes=minutes))
-    return True
+        info = get_login_attempts(user_id)
+        locked_until = info.get("locked_until", 0) if info else 0
+        minutes = max(1, int((locked_until - time.time()) / 60) + 1)
+        send_message(chat_id, SEC_LOGIN_LOCKED.format(minutes=minutes))
+        return True
+    except Exception as ex:
+        print("[SECURITY] check_admin_login_locked error:", str(ex)[:100])
+        return False
 
 
 def do_record_admin_attempt(user_id, success):
-    """ثبت تلاش ورود"""
-    record_login_attempt(user_id, success)
-    if success:
-        log_security_event(user_id, "admin_login_success")
-    else:
-        log_security_event(user_id, "admin_login_failed")
+    """ثبت تلاش ورود - هیچ‌وقت کرش نکنه"""
+    try:
+        record_login_attempt(user_id, success)
+        try:
+            if success:
+                log_security_event(user_id, "admin_login_success")
+            else:
+                log_security_event(user_id, "admin_login_failed")
+        except:
+            pass
+    except Exception as ex:
+        print("[SECURITY] do_record_admin_attempt error:", str(ex)[:100])
 
 
 # ==================== پنل امنیتی ادمین ====================
@@ -128,7 +181,11 @@ def show_security_menu(chat_id):
 
 
 def show_security_events(chat_id):
-    events = get_recent_security_events(limit=30)
+    try:
+        events = get_recent_security_events(limit=30)
+    except:
+        events = []
+
     if not events:
         send_message(chat_id, SEC_EVENTS_EMPTY, kb_security_menu())
         return
@@ -144,7 +201,11 @@ def show_security_events(chat_id):
 
 
 def show_blocked_users(chat_id):
-    blocked = get_blocked_users()
+    try:
+        blocked = get_blocked_users()
+    except:
+        blocked = []
+
     if not blocked:
         send_message(chat_id, SEC_BLOCKED_EMPTY, kb_security_menu())
         return
@@ -169,13 +230,19 @@ def show_blocked_users(chat_id):
 
 
 def do_unblock_user(chat_id, user_id):
-    unblock_user(user_id)
-    log_security_event(user_id, "unblocked_by_admin")
+    try:
+        unblock_user(user_id)
+        log_security_event(user_id, "unblocked_by_admin")
+    except:
+        pass
     send_message(chat_id, SEC_UNBLOCKED_OK, kb_security_menu())
 
 
 # ==================== مسدودسازی ====================
 def do_block_user(chat_id, target_id, reason, admin_id, duration_hours=0):
-    block_user(target_id, reason, admin_id, duration_hours)
-    log_security_event(target_id, "blocked", reason)
+    try:
+        block_user(target_id, reason, admin_id, duration_hours)
+        log_security_event(target_id, "blocked", reason)
+    except:
+        pass
     send_message(chat_id, "✅ کاربر {} مسدود شد.".format(target_id), kb_admin())
