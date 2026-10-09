@@ -1,6 +1,8 @@
 # ==================== توابع کمکی ====================
 import random
 import string
+import re
+import time
 from math import radians, sin, cos, sqrt, atan2
 from config import IRAN_CITIES, FUZZY_DISTANCE
 
@@ -92,38 +94,34 @@ def levenshtein_distance(s1, s2):
 
 
 def find_similar_cities(input_city, max_distance=None):
-    """پیدا کردن شهرهای مشابه با ورودی کاربر - با دامنه پویا"""
-    # اگه max_distance داده نشد، از تنظیمات بخون
     if max_distance is None:
         max_distance = FUZZY_DISTANCE
-    
+
     input_clean = input_city.strip().replace("ي", "ی").replace("ك", "ک")
     if not input_clean:
         return []
-    
+
+    # لیست شهرها رو از config بگیر (که ممکنه با مدیریت شهر آپدیت شده باشه)
+    try:
+        from config import IRAN_CITIES as CITIES
+    except:
+        CITIES = IRAN_CITIES
+
     matches = []
-    
-    for city in IRAN_CITIES:
+
+    for city in CITIES:
         city_clean = city.strip()
-        
-        # اگه دقیقاً یکی بود
         if input_clean == city_clean:
             return [city]
-        
-        # محاسبه فاصله
         distance = levenshtein_distance(input_clean, city_clean)
-        
-        # دامنه پویا: هر چی اسم شهر بلندتر، دامنه بیشتر
         dynamic_max = max_distance
         if len(city_clean) >= 5:
             dynamic_max = max_distance + 1
         if len(city_clean) >= 7:
             dynamic_max = max_distance + 2
-        
-        # محدودیت: فاصله نباید بیشتر از ۴۰٪ طول شهر باشه
         if distance <= dynamic_max and distance <= len(city_clean) * 0.4:
             matches.append((city, distance))
-    
+
     matches.sort(key=lambda x: x[1])
     return [m[0] for m in matches]
 
@@ -155,6 +153,77 @@ def normalize_text(text):
     return text.strip().replace("ي", "ی").replace("ك", "ک").replace("ة", "ه")
 
 
+# ==================== امنیت ====================
+# الگوهای مشکوک (لینک، تبلیغات، اسپم)
+SUSPICIOUS_PATTERNS = [
+    r"https?://",
+    r"t\.me/",
+    r"telegram\.me",
+    r"ble\.ir/[a-z]+",
+    r"\bBTC\b",
+    r"کازینو",
+    r"شرط‌بندی",
+    r"قمار",
+]
+
+# کلمات رکیک (نمونه - می‌تونی کامل کنی)
+BAD_WORDS = [
+    "حرومزاده", "حروم‌زاده", "احمق", "خرفت", "کثافت",
+    "بیشعور", "بی‌شعور", "دیوانه", "خر", "سگ",
+]
+
+
+def is_suspicious_text(text, max_links=1):
+    """آیا متن مشکوک هست؟"""
+    if not text:
+        return False
+
+    text_lower = text.lower()
+
+    # چک لینک‌ها
+    link_count = 0
+    for pattern in SUSPICIOUS_PATTERNS:
+        matches = re.findall(pattern, text_lower)
+        link_count += len(matches)
+    if link_count > max_links:
+        return True
+
+    # چک کلمات رکیک
+    bad_count = 0
+    for word in BAD_WORDS:
+        if word in text:
+            bad_count += 1
+    if bad_count >= 2:
+        return True
+
+    return False
+
+
+def sanitize_text(text, max_length=500):
+    """پاکسازی متن ورودی"""
+    if not text:
+        return ""
+    text = text.strip()
+    if len(text) > max_length:
+        text = text[:max_length]
+    # حذف کاراکترهای کنترلی
+    text = "".join(c for c in text if c == "\n" or c == "\t" or (ord(c) >= 32))
+    return text
+
+
+def is_rate_limit_exceeded(timestamps, max_count, window_seconds):
+    """
+    بررسی rate limit
+    timestamps: لیست زمان‌های قبلی (ثانیه)
+    max_count: حداکثر تعداد مجاز
+    window_seconds: پنجره زمانی به ثانیه
+    """
+    now = int(time.time())
+    cutoff = now - window_seconds
+    recent = [t for t in timestamps if t > cutoff]
+    return len(recent) >= max_count
+
+
 # ==================== کمکی ====================
 def truncate(text, max_len=100):
     if len(text) <= max_len:
@@ -172,3 +241,23 @@ def seconds_to_days(seconds):
 
 def format_toman(amount):
     return "{:,}".format(amount) + " تومان"
+
+
+def format_relative_time(timestamp):
+    """نمایش زمان نسبی: 'همین الان', '۵ دقیقه پیش', ..."""
+    if not timestamp:
+        return "—"
+    diff = int(time.time()) - int(timestamp)
+    if diff < 0:
+        return "آینده"
+    if diff < 60:
+        return "همین الان"
+    if diff < 3600:
+        return "{} دقیقه پیش".format(diff // 60)
+    if diff < 86400:
+        return "{} ساعت پیش".format(diff // 3600)
+    if diff < 30 * 86400:
+        return "{} روز پیش".format(diff // 86400)
+    if diff < 365 * 86400:
+        return "{} ماه پیش".format(diff // (30 * 86400))
+    return "{} سال پیش".format(diff // (365 * 86400))
