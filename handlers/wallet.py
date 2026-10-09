@@ -1,7 +1,6 @@
 # ==================== کیف پول ====================
 import time
-from config import CARD_NUMBER, CARD_OWNER, FREE_DAYS, SUPER_ADMIN
-from texts import (
+from config import CARD_NUMBER, CARD_OWNER, FREE_DAYS, FREE_CUSTOMERS, SUPER_ADMINfrom texts import (
     WALLET_TITLE, WALLET_BALANCE, WALLET_FREE_PERIOD, WALLET_FREE_LEFT,
     WALLET_STATUS_FREE, WALLET_STATUS_CHARGED, WALLET_STATUS_LOW,
     WALLET_STATUS_EMPTY, WALLET_HISTORY,
@@ -29,13 +28,14 @@ def show_wallet(chat_id, user_id):
     balance = get_wallet_balance(user_id)
     txt = WALLET_TITLE
     txt += WALLET_BALANCE.format(balance="{:,}".format(balance))
-    
-    if is_expert_in_free_period(expert):
+        if is_expert_in_free_period(expert):
         created = expert.get("created_at", int(time.time()))
         free_until = created + (FREE_DAYS * 86400)
         days_left = max(0, int((free_until - time.time()) / 86400))
+        customers_used = expert.get("referral_count", 0)
+        customers_left = max(0, FREE_CUSTOMERS - customers_used)
         txt += WALLET_FREE_PERIOD
-        txt += WALLET_FREE_LEFT.format(days=days_left)
+        txt += WALLET_FREE_LEFT.format(days=days_left, customers=customers_left)
         txt += "\n" + WALLET_STATUS_FREE
     else:
         if balance <= 0:
