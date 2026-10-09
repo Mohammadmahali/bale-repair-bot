@@ -14,6 +14,7 @@ from texts import (
     BTN_NAV_NESHAN, BTN_NAV_GOOGLE,
     BTN_EDIT, BTN_EDIT_CATEGORIES, BTN_EDIT_TARIFFS,
     BTN_EDIT_FEEDBACK, BTN_EDIT_CARD, BTN_SHOW_QR,
+    BTN_BULK_TARIFF,
 )
 
 
@@ -229,3 +230,20 @@ def kb_tariffs_list():
     return {"inline_keyboard": [
         [{"text": BTN_BACK, "callback_data": "adm:backedit"}]
     ]}
+
+
+# ==================== کیبورد ویرایش کلی تعرفه ====================
+def kb_tariffs_menu():
+    """منوی فرعی تعرفه‌ها (شامل ویرایش کلی)"""
+    return {"keyboard": [
+        [{"text": BTN_BULK_TARIFF}],
+        [{"text": BTN_BACK}]
+    ], "resize_keyboard": True}
+
+
+def kb_bulk_confirm():
+    """دکمه‌های تأیید/انصراف ویرایش کلی"""
+    return {"inline_keyboard": [[
+        {"text": "✅ بله، اعمال کن", "callback_data": "bulk:confirm"},
+        {"text": "❌ انصراف", "callback_data": "bulk:cancel"}
+    ]]}
