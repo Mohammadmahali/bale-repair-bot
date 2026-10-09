@@ -248,3 +248,11 @@ def kb_bulk_confirm():
         {"text": "✅ بله، اعمال کن", "callback_data": "bulk:confirm"},
         {"text": "❌ انصراف", "callback_data": "bulk:cancel"}
     ]]}
+
+
+def kb_rate_expert(expert_id):
+    """کیبورد دکمه امتیاز فوری بعد از انتخاب تعمیرکار"""
+    return {"inline_keyboard": [[
+        {"text": "⭐ امتیاز به تعمیرکار",
+         "callback_data": "rate:" + str(expert_id)}
+    ]]}
