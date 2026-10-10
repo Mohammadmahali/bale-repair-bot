@@ -407,12 +407,14 @@ def kb_broadcast_target():
     ]}
 
 
-def kb_broadcast_cats():
+def kb_broadcast_cats(mode="cat"):
+    """لیست گروه‌ها - mode: cat (برای گروه) یا subcat (برای زیرتخصص)"""
     from db import get_all_categories
     cats = list(get_all_categories().keys())
     kb = []
     for idx, cat in enumerate(cats):
-        kb.append([{"text": cat, "callback_data": "bcast:cat:" + str(idx)}])
+        cb = "bcast:{}:{}".format(mode, idx)
+        kb.append([{"text": cat, "callback_data": cb}])
     kb.append([{"text": BTN_BACK, "callback_data": "bcast:back"}])
     return {"inline_keyboard": kb}
 
