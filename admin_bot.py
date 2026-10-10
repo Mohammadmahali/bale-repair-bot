@@ -13,6 +13,7 @@ from keyboards import (
     kb_bulk_confirm,
     kb_edit_cities_menu, kb_cities_delete_list, kb_cities_reset_confirm,
     kb_security_menu, kb_blocked_user,
+    kb_category_detail, kb_sub_detail,
 )
 from texts import (
     ADM_TITLE, ADM_ASK_PASS, ADM_WRONG_PASS, ADM_NOT_AUTH,
@@ -43,6 +44,11 @@ from texts import (
     EDIT_CITIES_LIST_TITLE, EDIT_CITIES_RESET,
     EDIT_CITIES_RESET_OK, EDIT_CITIES_RESET_CONFIRM,
     ADM_SECURITY, ADM_SEC_EVENTS, ADM_SEC_BLOCKED, ADM_SEC_BACK,
+    EDIT_CAT_NAME_ASK, EDIT_CAT_NAME_DONE, EDIT_CAT_NAME_EXISTS,
+    EDIT_CAT_NAME_NOT_FOUND, EDIT_CAT_NAME_INVALID,
+    EDIT_SUB_NAME_ASK, EDIT_SUB_NAME_DONE, EDIT_SUB_NAME_EXISTS,
+    EDIT_SUB_NAME_NOT_FOUND, EDIT_SUB_NAME_INVALID,
+    BTN_EDIT_CAT_NAME, BTN_EDIT_SUB_NAME,
 )
 from db import (
     get_operators, add_operator, remove_operator,
@@ -53,6 +59,7 @@ from db import (
     load_admin_config, save_admin_config,
     get_all_categories, get_category_subs, add_category_db,
     remove_category_db, add_sub_db, remove_sub_db,
+    rename_category_db, rename_sub_db,
     get_category_by_index, get_sub_by_index,
     get_sub_tariff, set_sub_tariff, get_all_sub_tariffs,
     get_all_cities, add_city_db, remove_city_db,
@@ -210,7 +217,7 @@ def handle_admin_message(msg):
             admin_send_message(chat_id, ADM_TITLE, kb_admin())
             return
 
-        # ===== ورود با رمز (بدون قفل) =====
+        # ===== ورود با رمز =====
         if step == "adm_password":
             pw = get_user_password(user_id)
             if text == pw:
@@ -253,7 +260,7 @@ def handle_admin_message(msg):
                 admin_send_message(chat_id, INVALID_INPUT, kb_back())
             return
 
-        # ===== ویرایش دسته =====
+        # ===== ویرایش: افزودن دسته =====
         if step == "edit_cat_add":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -270,6 +277,7 @@ def handle_admin_message(msg):
             admin_user_states.pop(user_id, None)
             return
 
+        # ===== ویرایش: افزودن زیرتخصص =====
         if step == "edit_sub_add":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -292,6 +300,54 @@ def handle_admin_message(msg):
             admin_user_states.pop(user_id, None)
             return
 
+        # ===== ویرایش نام گروه =====
+        if step == "rename_cat":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                cat_idx = data.get("cat_idx", -1)
+                admin_user_states.pop(user_id, None)
+                show_category_detail(chat_id, cat_idx)
+                return
+            old_name = data.get("old_name", "")
+            new_name = text.strip()
+            if not new_name or len(new_name) < 2 or len(new_name) > 60:
+                admin_send_message(chat_id, EDIT_CAT_NAME_INVALID, kb_back())
+                return
+            if rename_category_db(old_name, new_name):
+                admin_user_states.pop(user_id, None)
+                admin_send_message(
+                    chat_id,
+                    EDIT_CAT_NAME_DONE.format(old=old_name, new=new_name),
+                    kb_edit_menu()
+                )
+            else:
+                admin_send_message(chat_id, EDIT_CAT_NAME_EXISTS.format(name=new_name), kb_back())
+            return
+
+        # ===== ویرایش نام زیرتخصص =====
+        if step == "rename_sub":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                cat_idx = data.get("cat_idx", -1)
+                admin_user_states.pop(user_id, None)
+                show_category_detail(chat_id, cat_idx)
+                return
+            old_name = data.get("old_name", "")
+            cat_name = data.get("cat_name", "")
+            new_name = text.strip()
+            if not new_name or len(new_name) < 2 or len(new_name) > 100:
+                admin_send_message(chat_id, EDIT_SUB_NAME_INVALID, kb_back())
+                return
+            if rename_sub_db(cat_name, old_name, new_name):
+                admin_user_states.pop(user_id, None)
+                admin_send_message(
+                    chat_id,
+                    EDIT_SUB_NAME_DONE.format(old=old_name, new=new_name),
+                    kb_edit_menu()
+                )
+            else:
+                admin_send_message(chat_id, EDIT_SUB_NAME_EXISTS.format(name=new_name), kb_back())
+            return
+
+        # ===== تعرفه زیرتخصص =====
         if step == "edit_sub_tariff":
             if text in [BTN_CANCEL, BTN_BACK]:
                 admin_user_states.pop(user_id, None)
@@ -569,6 +625,50 @@ def handle_admin_callback(cb):
         elif action == "addcat":
             admin_user_states[user_id] = {"step": "edit_cat_add", "data": {}}
             admin_send_message(chat_id, "📂 نام دسته‌بندی جدید را وارد کنید:", kb_back())
+        elif action == "rencat":
+            cat_idx = int(parts[2])
+            cat = get_category_by_index(cat_idx)
+            if not cat:
+                admin_answer_callback(cb_id, "پیدا نشد")
+                return
+            admin_user_states[user_id] = {
+                "step": "rename_cat",
+                "data": {"cat_idx": cat_idx, "old_name": cat}
+            }
+            admin_send_message(
+                chat_id,
+                EDIT_CAT_NAME_ASK.format(old=cat),
+                kb_back()
+            )
+        elif action == "subdet":
+            cat_idx = int(parts[2])
+            sub_idx = int(parts[3])
+            cat = get_category_by_index(cat_idx)
+            sub = get_sub_by_index(cat, sub_idx)
+            if not cat or not sub:
+                admin_answer_callback(cb_id, "پیدا نشد")
+                return
+            txt = "📂 گروه: {}\n\n".format(cat)
+            txt += "🔧 زیرتخصص: {}\n".format(sub)
+            txt += "💰 تعرفه: {:,} تومان".format(get_sub_tariff(sub))
+            admin_send_message(chat_id, txt, kb_sub_detail(cat_idx, sub_idx))
+        elif action == "rensub":
+            cat_idx = int(parts[2])
+            sub_idx = int(parts[3])
+            cat = get_category_by_index(cat_idx)
+            sub = get_sub_by_index(cat, sub_idx)
+            if not cat or not sub:
+                admin_answer_callback(cb_id, "پیدا نشد")
+                return
+            admin_user_states[user_id] = {
+                "step": "rename_sub",
+                "data": {"cat_idx": cat_idx, "cat_name": cat, "old_name": sub}
+            }
+            admin_send_message(
+                chat_id,
+                EDIT_SUB_NAME_ASK.format(old=sub),
+                kb_back()
+            )
         elif action == "addsub":
             cat_idx = int(parts[2])
             admin_user_states[user_id] = {"step": "edit_sub_add", "data": {"cat_idx": cat_idx}}
@@ -847,12 +947,7 @@ def show_category_detail(chat_id, cat_idx):
             txt += "{}. {}\n".format(i, s)
     else:
         txt += "هنوز زیرتخصصی نداره.\n"
-    kb = {"inline_keyboard": [
-        [{"text": "➕ افزودن زیرتخصص", "callback_data": "adm:addsub:" + str(cat_idx)}],
-        [{"text": "🗑 حذف زیرتخصص", "callback_data": "adm:delsublist:" + str(cat_idx)}],
-        [{"text": "🗑 حذف کل دسته", "callback_data": "adm:delcat:" + str(cat_idx)}],
-        [{"text": BTN_BACK, "callback_data": "adm:editcatlist"}]
-    ]}
+    kb = kb_category_detail(cat_idx)
     admin_send_message(chat_id, txt, kb)
 
 
@@ -863,17 +958,17 @@ def show_subs_delete_list(chat_id, cat_idx):
         return
     subs = get_category_subs(cat)
     if not subs:
-        admin_send_message(chat_id, "زیرتخصصی برای حذف وجود نداره.", kb_edit_menu())
+        admin_send_message(chat_id, "زیرتخصصی برای ویرایش وجود نداره.", kb_edit_menu())
         return
     kb = {"inline_keyboard": []}
     for i, s in enumerate(subs):
         kb["inline_keyboard"].append([
-            {"text": "🗑 " + s, "callback_data": "adm:delsubid:" + str(cat_idx) + ":" + str(i)}
+            {"text": "✏️ " + s, "callback_data": "adm:subdet:" + str(cat_idx) + ":" + str(i)}
         ])
     kb["inline_keyboard"].append([
         {"text": BTN_BACK, "callback_data": "adm:editcat:" + str(cat_idx)}
     ])
-    admin_send_message(chat_id, "روی زیرتخصصی که می‌خواهید حذف کنید بزنید:", kb)
+    admin_send_message(chat_id, "روی زیرتخصص مورد نظر بزنید:", kb)
 
 
 def show_tariffs_list(chat_id):
