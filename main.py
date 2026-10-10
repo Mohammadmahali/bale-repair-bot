@@ -61,6 +61,7 @@ from texts import (
     BTN_BACK,
     BTN_DEVICE_LOG, BTN_ADD_DEFECT, BTN_VIEW_DEVICE_LOGS,
     BTN_MY_DEVICE_LOGS,
+    BTN_TEXT_SEARCH,
 )
 
 # Handlers
@@ -71,6 +72,7 @@ from handlers.register import (
 from handlers.search import (
     start_search, continue_search, handle_location as search_location,
     handle_pick_expert, handle_city_fuzzy_callback, handle_city_multiple_callback,
+    start_text_search, continue_text_search, handle_text_search_pick,
 )
 from handlers.profile import show_profile, handle_profile_location
 from handlers.wallet import (
@@ -172,6 +174,11 @@ def handle_message(msg):
             if continue_edit_log(chat_id, user_id, text, sessions):
                 return
 
+        # ===== جستجوی متنی =====
+        if step == "tsearch_query":
+            if continue_text_search(chat_id, user_id, text, sessions):
+                return
+
         # ===== لوکیشن پروفایل =====
         if step == "profile_location":
             if text == BTN_BACK:
@@ -222,6 +229,9 @@ def handle_message(msg):
 
     if text == BTN_SEARCH_ADVANCED:
         start_search(chat_id, user_id, "adv", sessions, search_modes); return
+
+    if text == BTN_TEXT_SEARCH:
+        start_text_search(chat_id, user_id, sessions); return
 
     if text == BTN_EXPERTS_LIST:
         handle_experts_list(chat_id); return
@@ -297,6 +307,29 @@ def handle_callback(cb):
             answer_callback(cb_id)
             return
         answer_callback(cb_id, "خطا")
+        return
+
+    # ===== جستجوی متنی =====
+    if data.startswith("tsearch:"):
+        parts = data.split(":")
+        sub_action = parts[1] if len(parts) > 1 else ""
+
+        if sub_action == "pick":
+            cat = parts[2]
+            sub = parts[3]
+            if handle_text_search_pick(chat_id, user_id, cat, sub, sessions):
+                answer_callback(cb_id, "✅")
+                return
+            answer_callback(cb_id, "خطا")
+            return
+
+        if sub_action == "back":
+            sessions.pop(user_id, None)
+            answer_callback(cb_id)
+            send_message(chat_id, USE_MENU, kb_main())
+            return
+
+        answer_callback(cb_id)
         return
 
     # ===== انتخاب تعمیرکار =====
