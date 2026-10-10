@@ -20,6 +20,7 @@ from texts import (
     BTN_MY_DEVICE_LOGS, BTN_DEVICE_LOG_VIEW, BTN_DEVICE_LOG_EDIT,
     ADM_SECURITY, ADM_SEC_EVENTS, ADM_SEC_BLOCKED, ADM_SEC_BACK,
     SEC_UNBLOCK, EDIT_CITIES_RESET,
+    BTN_EDIT_CAT_NAME, BTN_EDIT_SUB_NAME,
 )
 
 
@@ -359,7 +360,7 @@ def kb_device_log_confirm_delete(log_id):
     ]]}
 
 
-# ==================== کیبورد امنیت (ادمین) ====================
+# ==================== کیبورد امنیت ====================
 def kb_security_menu():
     return {"keyboard": [
         [{"text": ADM_SEC_EVENTS}],
@@ -372,3 +373,24 @@ def kb_blocked_user(user_id):
     return {"inline_keyboard": [[
         {"text": SEC_UNBLOCK, "callback_data": "adm:unblock:" + str(user_id)}
     ]]}
+
+
+# ==================== کیبورد ویرایش نام گروه/زیرگروه ====================
+def kb_category_detail(cat_idx):
+    """جزئیات یه گروه (با دکمه ویرایش نام)"""
+    return {"inline_keyboard": [
+        [{"text": BTN_EDIT_CAT_NAME, "callback_data": "adm:rencat:" + str(cat_idx)}],
+        [{"text": "➕ افزودن زیرتخصص", "callback_data": "adm:addsub:" + str(cat_idx)}],
+        [{"text": "🗑 حذف زیرتخصص", "callback_data": "adm:delsublist:" + str(cat_idx)}],
+        [{"text": "🗑 حذف کل دسته", "callback_data": "adm:delcat:" + str(cat_idx)}],
+        [{"text": BTN_BACK, "callback_data": "adm:editcatlist"}]
+    ]}
+
+
+def kb_sub_detail(cat_idx, sub_idx):
+    """جزئیات یه زیرتخصص (با دکمه ویرایش نام)"""
+    return {"inline_keyboard": [
+        [{"text": BTN_EDIT_SUB_NAME, "callback_data": "adm:rensub:" + str(cat_idx) + ":" + str(sub_idx)}],
+        [{"text": "🗑 حذف این زیرتخصص", "callback_data": "adm:delsubid:" + str(cat_idx) + ":" + str(sub_idx)}],
+        [{"text": BTN_BACK, "callback_data": "adm:editcat:" + str(cat_idx)}]
+    ]}
