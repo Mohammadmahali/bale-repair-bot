@@ -498,7 +498,6 @@ def handle_admin_message(msg):
                 admin_send_message(chat_id, BCAST_TEXT_TOO_LONG, kb_back())
                 return
 
-            # تعداد گیرندگان
             recipients = _get_broadcast_recipients(data)
             if not recipients:
                 admin_user_states.pop(user_id, None)
@@ -643,14 +642,15 @@ def handle_admin_callback(cb):
 
     if data == "bcast:cats":
         admin_answer_callback(cb_id)
-        admin_send_message(chat_id, BCAST_SELECT_CAT, kb_broadcast_cats())
+        admin_send_message(chat_id, BCAST_SELECT_CAT, kb_broadcast_cats("cat"))
         return
 
     if data == "bcast:subs":
         admin_answer_callback(cb_id)
-        admin_send_message(chat_id, BCAST_SELECT_CAT, kb_broadcast_cats())
+        admin_send_message(chat_id, BCAST_SELECT_CAT, kb_broadcast_cats("subcat"))
         return
 
+    # ===== انتخاب گروه (مستقیم به متن) =====
     if data.startswith("bcast:cat:"):
         cat_idx = int(parts[2])
         cat = get_category_by_index(cat_idx)
@@ -663,6 +663,21 @@ def handle_admin_callback(cb):
             "data": {"target_type": "category", "target_value": cat}
         }
         admin_send_message(chat_id, BCAST_ASK_TEXT, kb_back())
+        return
+
+    # ===== انتخاب گروه (برای رفتن به زیرتخصص) =====
+    if data.startswith("bcast:subcat:"):
+        cat_idx = int(parts[2])
+        cat = get_category_by_index(cat_idx)
+        if not cat:
+            admin_answer_callback(cb_id, "پیدا نشد")
+            return
+        admin_answer_callback(cb_id)
+        admin_send_message(
+            chat_id,
+            BCAST_SELECT_SUB.format(cat=cat),
+            kb_broadcast_subs(cat_idx)
+        )
         return
 
     if data.startswith("bcast:sub:"):
@@ -699,7 +714,6 @@ def handle_admin_callback(cb):
         admin_answer_callback(cb_id, "شروع ارسال")
         admin_user_states.pop(user_id, None)
 
-        # محاسبه زمان تقریبی
         seconds = int(len(recipients) * 0.5)
 
         admin_send_message(
@@ -708,7 +722,6 @@ def handle_admin_callback(cb):
             kb_admin()
         )
 
-        # ارسال در thread جداگانه
         t = threading.Thread(
             target=_send_broadcast,
             args=(chat_id, recipients, msg_text),
@@ -942,7 +955,6 @@ def _send_broadcast(admin_chat_id, recipients, msg_text):
                 pass
         time.sleep(0.5)
 
-    # اطلاع به ادمین
     try:
         admin_send_message(
             admin_chat_id,
