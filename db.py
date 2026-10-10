@@ -460,6 +460,52 @@ def remove_category_db(label):
     return True
 
 
+def rename_category_db(old_name, new_name):
+    """تغییر نام یه گروه (با حفظ ترتیب و زیرتخصص‌ها)"""
+    old_name = (old_name or "").strip()
+    new_name = (new_name or "").strip()
+    if not old_name or not new_name:
+        return False
+    if old_name == new_name:
+        return True  # چیزی برای تغییر نیست
+    cats = get_all_categories()
+    if old_name not in cats:
+        return False
+    if new_name in cats:
+        return False
+    # نگه‌داشتن ترتیب
+    new_cats = {}
+    for k, v in cats.items():
+        if k == old_name:
+            new_cats[new_name] = v
+        else:
+            new_cats[k] = v
+    db_sql.config_set("categories", new_cats)
+    return True
+
+
+def rename_sub_db(category, old_sub, new_sub):
+    """تغییر نام یه زیرتخصص (با حفظ ترتیب)"""
+    old_sub = (old_sub or "").strip()
+    new_sub = (new_sub or "").strip()
+    if not old_sub or not new_sub:
+        return False
+    if old_sub == new_sub:
+        return True
+    cats = get_all_categories()
+    if category not in cats:
+        return False
+    subs = cats[category]
+    if old_sub not in subs:
+        return False
+    if new_sub in subs:
+        return False
+    idx = subs.index(old_sub)
+    subs[idx] = new_sub
+    db_sql.config_set("categories", cats)
+    return True
+
+
 def add_sub_db(category, sub):
     cats = get_all_categories()
     if category not in cats:
@@ -766,25 +812,8 @@ def get_blocked_users():
     return db_sql.get_blocked_users()
 
 
-def get_login_attempts(user_id):
-    return db_sql.get_login_attempts(user_id)
-
-
-def record_login_attempt(user_id, success):
-    return db_sql.record_login_attempt(user_id, success)
-
-
-def is_login_locked(user_id):
-    return db_sql.is_login_locked(user_id)
-
-
-def reset_login_attempts(user_id):
-    return db_sql.reset_login_attempts(user_id)
-
-
 # ==================== نگهداری ====================
 def cleanup_old_data(days=180):
-    """پاکسازی داده‌های قدیمی‌تر از N روز"""
     cutoff = int(time.time()) - (days * 86400)
 
     jobs_deleted = db_sql.delete_old_jobs(cutoff)
