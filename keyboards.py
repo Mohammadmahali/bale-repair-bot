@@ -21,6 +21,7 @@ from texts import (
     ADM_SECURITY, ADM_SEC_EVENTS, ADM_SEC_BLOCKED, ADM_SEC_BACK,
     SEC_UNBLOCK, EDIT_CITIES_RESET,
     BTN_EDIT_CAT_NAME, BTN_EDIT_SUB_NAME,
+    BTN_BROADCAST, BCAST_TARGET_ALL, BCAST_TARGET_BY_CAT, BCAST_TARGET_BY_SUB,
 )
 
 
@@ -107,6 +108,7 @@ def kb_admin():
         [{"text": ADM_JOBS}],
         [{"text": ADM_REVENUE}],
         [{"text": ADM_OPERATORS}],
+        [{"text": BTN_BROADCAST}],
         [{"text": ADM_SECURITY}],
         [{"text": BTN_EDIT}],
         [{"text": ADM_CHANGE_PASS}],
@@ -394,3 +396,42 @@ def kb_sub_detail(cat_idx, sub_idx):
         [{"text": "🗑 حذف این زیرتخصص", "callback_data": "adm:delsubid:" + str(cat_idx) + ":" + str(sub_idx)}],
         [{"text": BTN_BACK, "callback_data": "adm:editcat:" + str(cat_idx)}]
     ]}
+    
+    # ==================== کیبورد پیام گروهی ====================
+def kb_broadcast_target():
+    return {"inline_keyboard": [
+        [{"text": BCAST_TARGET_ALL, "callback_data": "bcast:all"}],
+        [{"text": BCAST_TARGET_BY_CAT, "callback_data": "bcast:cats"}],
+        [{"text": BCAST_TARGET_BY_SUB, "callback_data": "bcast:subs"}],
+        [{"text": BTN_BACK, "callback_data": "bcast:back"}]
+    ]}
+
+
+def kb_broadcast_cats():
+    from db import get_all_categories
+    cats = list(get_all_categories().keys())
+    kb = []
+    for idx, cat in enumerate(cats):
+        kb.append([{"text": cat, "callback_data": "bcast:cat:" + str(idx)}])
+    kb.append([{"text": BTN_BACK, "callback_data": "bcast:back"}])
+    return {"inline_keyboard": kb}
+
+
+def kb_broadcast_subs(cat_idx):
+    from db import get_category_by_index, get_category_subs
+    cat = get_category_by_index(cat_idx)
+    if not cat:
+        return {"inline_keyboard": []}
+    subs = get_category_subs(cat)
+    kb = []
+    for i, sub in enumerate(subs):
+        kb.append([{"text": sub, "callback_data": "bcast:sub:" + str(cat_idx) + ":" + str(i)}])
+    kb.append([{"text": BTN_BACK, "callback_data": "bcast:cats"}])
+    return {"inline_keyboard": kb}
+
+
+def kb_broadcast_confirm():
+    return {"inline_keyboard": [[
+        {"text": "✅ ارسال کن", "callback_data": "bcast:confirm"},
+        {"text": "❌ انصراف", "callback_data": "bcast:cancel"}
+    ]]}
