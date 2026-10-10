@@ -22,6 +22,7 @@ from texts import (
     SEC_UNBLOCK, EDIT_CITIES_RESET,
     BTN_EDIT_CAT_NAME, BTN_EDIT_SUB_NAME,
     BTN_BROADCAST, BCAST_TARGET_ALL, BCAST_TARGET_BY_CAT, BCAST_TARGET_BY_SUB,
+    BTN_TEXT_SEARCH,
 )
 
 
@@ -30,6 +31,7 @@ def kb_main():
         [{"text": BTN_REGISTER}],
         [{"text": BTN_SEARCH_SIMPLE}],
         [{"text": BTN_SEARCH_ADVANCED}],
+        [{"text": BTN_TEXT_SEARCH}],
         [{"text": BTN_EXPERTS_LIST}, {"text": BTN_MY_PROFILE}],
         [{"text": BTN_FEEDBACK}]
     ], "resize_keyboard": True}
@@ -437,3 +439,17 @@ def kb_broadcast_confirm():
         {"text": "✅ ارسال کن", "callback_data": "bcast:confirm"},
         {"text": "❌ انصراف", "callback_data": "bcast:cancel"}
     ]]}
+
+# ==================== کیبورد جستجوی متنی ====================
+def kb_text_search_results(matches):
+    """
+    matches: list of (cat_name, sub_name, distance)
+    """
+    kb = []
+    for i, (cat, sub, dist) in enumerate(matches):
+        kb.append([
+            {"text": "🔧 {}".format(sub),
+             "callback_data": "tsearch:pick:{}:{}".format(cat, sub)}
+        ])
+    kb.append([{"text": BTN_BACK, "callback_data": "tsearch:back"}])
+    return {"inline_keyboard": kb}
