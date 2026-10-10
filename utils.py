@@ -261,3 +261,76 @@ def format_relative_time(timestamp):
     if diff < 365 * 86400:
         return "{} ماه پیش".format(diff // (30 * 86400))
     return "{} سال پیش".format(diff // (365 * 86400))
+
+def find_similar_sub_specialties(query, max_results=5):
+    """
+    جستجوی Fuzzy توی همه زیرتخصص‌ها
+    return: list of (cat_name, sub_name, distance)
+    """
+    from db import get_all_categories
+
+    if not query:
+        return []
+
+    def _norm(s):
+        if not s:
+            return ""
+        s = s.strip()
+        s = s.replace("ي", "ی").replace("ك", "ک")
+        s = s.replace("\u200c", "").replace("\u200f", "").replace("\u200e", "")
+        s = s.replace(" ", "").replace("‌", "")
+        return s
+
+    q_norm = _norm(query)
+    if len(q_norm) < 2:
+        return []
+
+    try:
+        cats = get_all_categories()
+    except:
+        return []
+
+    matches = []
+
+    for cat_name, subs in cats.items():
+        for sub in subs:
+            sub_norm = _norm(sub)
+            if not sub_norm:
+                continue
+
+            # ۱) تطبیق دقیق
+            if q_norm == sub_norm:
+                matches.append((cat_name, sub, 0))
+                continue
+
+            # ۲) زیررشته (یکی توی دیگری)
+            if q_norm in sub_norm or sub_norm in q_norm:
+                shorter = min(len(q_norm), len(sub_norm))
+                longer = max(len(q_norm), len(sub_norm))
+                ratio = shorter / longer if longer > 0 else 0
+                dist = int((1 - ratio) * 4)
+                matches.append((cat_name, sub, dist))
+                continue
+
+            # ۳) Levenshtein
+            dist = levenshtein_distance(q_norm, sub_norm)
+            max_dist = max(2, int(len(sub_norm) * 0.4))
+            if dist <= max_dist:
+                matches.append((cat_name, sub, dist))
+
+    # مرتب‌سازی بر اساس فاصله
+    matches.sort(key=lambda x: (x[2], len(x[1])))
+
+    # حذف تکراری‌ها
+    seen = set()
+    result = []
+    for cat_name, sub, dist in matches:
+        key = (cat_name, sub)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append((cat_name, sub, dist))
+        if len(result) >= max_results:
+            break
+
+    return result
