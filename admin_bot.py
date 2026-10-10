@@ -1,5 +1,6 @@
 # ==================== ربات ادمین (جدا) ====================
 import time
+import threading
 from config import SUPER_ADMIN
 from api_admin import (
     admin_send_message, admin_answer_callback,
@@ -14,6 +15,7 @@ from keyboards import (
     kb_edit_cities_menu, kb_cities_delete_list, kb_cities_reset_confirm,
     kb_security_menu, kb_blocked_user,
     kb_category_detail, kb_sub_detail,
+    kb_broadcast_target, kb_broadcast_cats, kb_broadcast_subs, kb_broadcast_confirm,
 )
 from texts import (
     ADM_TITLE, ADM_ASK_PASS, ADM_WRONG_PASS, ADM_NOT_AUTH,
@@ -49,6 +51,12 @@ from texts import (
     EDIT_SUB_NAME_ASK, EDIT_SUB_NAME_DONE, EDIT_SUB_NAME_EXISTS,
     EDIT_SUB_NAME_NOT_FOUND, EDIT_SUB_NAME_INVALID,
     BTN_EDIT_CAT_NAME, BTN_EDIT_SUB_NAME,
+    BTN_BROADCAST,
+    BCAST_TITLE, BCAST_SELECT_TARGET, BCAST_SELECT_CAT, BCAST_SELECT_SUB,
+    BCAST_ASK_TEXT, BCAST_TEXT_TOO_LONG, BCAST_TEXT_EMPTY,
+    BCAST_PREVIEW, BCAST_NO_RECIPIENTS, BCAST_CANCELED,
+    BCAST_SENDING, BCAST_DONE,
+    BCAST_TARGET_ALL, BCAST_TARGET_BY_CAT, BCAST_TARGET_BY_SUB,
 )
 from db import (
     get_operators, add_operator, remove_operator,
@@ -155,6 +163,8 @@ def handle_admin_message(msg):
             show_blocked_users(chat_id); return
         if text == ADM_SEC_BACK:
             admin_send_message(chat_id, ADM_TITLE, kb_admin()); return
+        if text == BTN_BROADCAST:
+            show_broadcast_menu(chat_id, user_id); return
         if text == BTN_EDIT:
             show_edit_menu(chat_id); return
         if text == BTN_EDIT_CATEGORIES:
@@ -474,6 +484,43 @@ def handle_admin_message(msg):
                 admin_send_message(chat_id, EDIT_CITY_EXISTS.format(city=name), kb_back())
             return
 
+        # ===== پیام گروهی: دریافت متن =====
+        if step == "broadcast_text":
+            if text in [BTN_CANCEL, BTN_BACK]:
+                admin_user_states.pop(user_id, None)
+                admin_send_message(chat_id, BCAST_CANCELED, kb_admin())
+                return
+            msg_text = text.strip()
+            if not msg_text:
+                admin_send_message(chat_id, BCAST_TEXT_EMPTY, kb_back())
+                return
+            if len(msg_text) > 2000:
+                admin_send_message(chat_id, BCAST_TEXT_TOO_LONG, kb_back())
+                return
+
+            # تعداد گیرندگان
+            recipients = _get_broadcast_recipients(data)
+            if not recipients:
+                admin_user_states.pop(user_id, None)
+                admin_send_message(chat_id, BCAST_NO_RECIPIENTS, kb_admin())
+                return
+
+            data["text"] = msg_text
+            target_label = _get_target_label(data)
+
+            preview = BCAST_PREVIEW.format(
+                count=len(recipients),
+                target=target_label,
+                text=msg_text
+            )
+            state["step"] = "broadcast_confirm"
+            admin_send_message(chat_id, preview, kb_broadcast_confirm())
+            return
+
+        if step == "broadcast_confirm":
+            admin_send_message(chat_id, "لطفاً از دکمه‌های بالا استفاده کنید.", kb_broadcast_confirm())
+            return
+
     # پیام نامشخص
     if is_admin(user_id):
         handle_admin_start(chat_id, user_id)
@@ -578,6 +625,105 @@ def handle_admin_callback(cb):
         admin_answer_callback(cb_id, "✅")
         return
 
+    # ===== پیام گروهی =====
+    if data == "bcast:back":
+        admin_answer_callback(cb_id)
+        admin_user_states.pop(user_id, None)
+        admin_send_message(chat_id, ADM_TITLE, kb_admin())
+        return
+
+    if data == "bcast:all":
+        admin_answer_callback(cb_id)
+        admin_user_states[user_id] = {
+            "step": "broadcast_text",
+            "data": {"target_type": "all"}
+        }
+        admin_send_message(chat_id, BCAST_ASK_TEXT, kb_back())
+        return
+
+    if data == "bcast:cats":
+        admin_answer_callback(cb_id)
+        admin_send_message(chat_id, BCAST_SELECT_CAT, kb_broadcast_cats())
+        return
+
+    if data == "bcast:subs":
+        admin_answer_callback(cb_id)
+        admin_send_message(chat_id, BCAST_SELECT_CAT, kb_broadcast_cats())
+        return
+
+    if data.startswith("bcast:cat:"):
+        cat_idx = int(parts[2])
+        cat = get_category_by_index(cat_idx)
+        if not cat:
+            admin_answer_callback(cb_id, "پیدا نشد")
+            return
+        admin_answer_callback(cb_id)
+        admin_user_states[user_id] = {
+            "step": "broadcast_text",
+            "data": {"target_type": "category", "target_value": cat}
+        }
+        admin_send_message(chat_id, BCAST_ASK_TEXT, kb_back())
+        return
+
+    if data.startswith("bcast:sub:"):
+        cat_idx = int(parts[2])
+        sub_idx = int(parts[3])
+        cat = get_category_by_index(cat_idx)
+        sub = get_sub_by_index(cat, sub_idx)
+        if not cat or not sub:
+            admin_answer_callback(cb_id, "پیدا نشد")
+            return
+        admin_answer_callback(cb_id)
+        admin_user_states[user_id] = {
+            "step": "broadcast_text",
+            "data": {"target_type": "sub", "target_value": cat, "sub_value": sub}
+        }
+        admin_send_message(chat_id, BCAST_ASK_TEXT, kb_back())
+        return
+
+    if data == "bcast:confirm":
+        state = admin_user_states.get(user_id, {})
+        bdata = state.get("data", {})
+        msg_text = bdata.get("text", "")
+        if not msg_text:
+            admin_answer_callback(cb_id, "خطا: متن پیدا نشد")
+            return
+
+        recipients = _get_broadcast_recipients(bdata)
+        if not recipients:
+            admin_user_states.pop(user_id, None)
+            admin_answer_callback(cb_id, "گیرنده‌ای نیست")
+            admin_send_message(chat_id, BCAST_NO_RECIPIENTS, kb_admin())
+            return
+
+        admin_answer_callback(cb_id, "شروع ارسال")
+        admin_user_states.pop(user_id, None)
+
+        # محاسبه زمان تقریبی
+        seconds = int(len(recipients) * 0.5)
+
+        admin_send_message(
+            chat_id,
+            BCAST_SENDING.format(count=len(recipients), seconds=seconds),
+            kb_admin()
+        )
+
+        # ارسال در thread جداگانه
+        t = threading.Thread(
+            target=_send_broadcast,
+            args=(chat_id, recipients, msg_text),
+            daemon=True
+        )
+        t.start()
+        return
+
+    if data == "bcast:cancel":
+        admin_user_states.pop(user_id, None)
+        admin_answer_callback(cb_id, "لغو شد")
+        admin_send_message(chat_id, BCAST_CANCELED, kb_admin())
+        return
+
+    # ===== سایر callbacks =====
     try:
         if action == "exp":
             show_expert_detail(chat_id, int(parts[2]))
@@ -722,6 +868,89 @@ def handle_admin_callback(cb):
         print("[ADMIN CB ERROR]", str(ex)[:200])
 
     admin_answer_callback(cb_id)
+
+
+# ==================== پیام گروهی: کمکی ====================
+def _get_broadcast_recipients(data):
+    """گرفتن لیست گیرندگان بر اساس فیلتر"""
+    target_type = data.get("target_type", "all")
+    target_value = data.get("target_value", "")
+    sub_value = data.get("sub_value", "")
+
+    all_experts = load_experts()
+    recipients = []
+
+    for e in all_experts:
+        if e.get("status", "approved") != "approved":
+            continue
+        if not e.get("active", True):
+            continue
+
+        if target_type == "all":
+            recipients.append(e)
+        elif target_type == "category":
+            if e.get("category") == target_value:
+                recipients.append(e)
+        elif target_type == "sub":
+            if e.get("category") == target_value:
+                subs = e.get("sub_specialties", [])
+                if sub_value in subs:
+                    recipients.append(e)
+
+    return recipients
+
+
+def _get_target_label(data):
+    """برچسب فیلتر برای پیش‌نمایش"""
+    target_type = data.get("target_type", "all")
+    target_value = data.get("target_value", "")
+    sub_value = data.get("sub_value", "")
+
+    if target_type == "all":
+        return "همه تعمیرکاران"
+    elif target_type == "category":
+        return target_value
+    elif target_type == "sub":
+        return "{} → {}".format(target_value, sub_value)
+    return "؟"
+
+
+def _send_broadcast(admin_chat_id, recipients, msg_text):
+    """ارسال پیام به لیست گیرندگان (در thread جداگانه)"""
+    from api import send_message
+
+    ok = 0
+    fail = 0
+    total = len(recipients)
+
+    for expert in recipients:
+        try:
+            uid = expert.get("user_id")
+            if not uid:
+                fail += 1
+                continue
+            result = send_message(uid, msg_text)
+            if result and result.get("ok"):
+                ok += 1
+            else:
+                fail += 1
+        except Exception as ex:
+            fail += 1
+            try:
+                print("[BCAST ERROR]", str(ex)[:100])
+            except:
+                pass
+        time.sleep(0.5)
+
+    # اطلاع به ادمین
+    try:
+        admin_send_message(
+            admin_chat_id,
+            BCAST_DONE.format(ok=ok, fail=fail, total=total),
+            kb_admin()
+        )
+    except Exception as ex:
+        print("[BCAST NOTIFY ERROR]", str(ex)[:100])
 
 
 # ==================== نمایش آمار ====================
@@ -1026,6 +1255,13 @@ def show_cities_delete(chat_id, page=0):
     txt = EDIT_CITIES_LIST_TITLE + "\n\n📊 تعداد: " + str(count)
     kb = kb_cities_delete_list(page=page)
     admin_send_message(chat_id, txt, kb)
+
+
+# ==================== پیام گروهی ====================
+def show_broadcast_menu(chat_id, user_id):
+    """نمایش منوی پیام گروهی"""
+    admin_user_states.pop(user_id, None)
+    admin_send_message(chat_id, BCAST_TITLE + "\n\n" + BCAST_SELECT_TARGET, kb_broadcast_target())
 
 
 # ==================== حلقه اصلی ====================
