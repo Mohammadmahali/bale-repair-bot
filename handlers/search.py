@@ -12,12 +12,14 @@ from texts import (
     FUZZY_CONFIRM, FUZZY_YES, FUZZY_NO, FUZZY_MULTIPLE,
     FUZZY_CITY_NOT_FOUND, FUZZY_LOCATION_HINT,
     BTN_NAV_NESHAN, BTN_NAV_GOOGLE,
+    TEXT_SEARCH_TITLE, TEXT_SEARCH_ASK, TEXT_SEARCH_NO_RESULT,
+    TEXT_SEARCH_MULTIPLE, TEXT_SEARCH_FOUND,
 )
 from keyboards import (
     kb_categories, kb_yes_no, kb_back, kb_location,
     kb_who_picks, kb_navigation, kb_main,
     kb_city_confirm, kb_city_multiple,
-    kb_rate_expert,
+    kb_rate_expert, kb_text_search_results,
 )
 from api import send_message
 from db import (
@@ -25,10 +27,12 @@ from db import (
     find_expert_by_id, get_feedback_id,
     get_expert_priority_penalty,
     get_spec_rating_for_search, get_spec_reviews_count,
+    get_all_categories,
 )
 from utils import (
     parse_numbers, parse_single_number, parse_priorities,
-    find_similar_cities, format_numbered_list, format_criteria_list,
+    find_similar_cities, find_similar_sub_specialties,
+    format_numbered_list, format_criteria_list,
     haversine, normalize_text,
 )
 from handlers.register import get_subs_by_category, is_valid_category
@@ -68,12 +72,103 @@ def _find_exact_city(input_city):
     return None
 
 
+# ==================== جستجوی معمولی ====================
 def start_search(chat_id, user_id, mode, sessions, search_modes):
     search_modes[user_id] = mode
     sessions[user_id] = {"step": "req_cat", "data": {}}
     send_message(chat_id, CHOOSE_OPTION, kb_categories())
 
 
+# ==================== جستجوی متنی ====================
+def start_text_search(chat_id, user_id, sessions):
+    """شروع جستجوی متنی"""
+    sessions[user_id] = {"step": "tsearch_query", "data": {}}
+    send_message(chat_id, TEXT_SEARCH_TITLE + "\n\n" + TEXT_SEARCH_ASK, kb_back())
+
+
+def continue_text_search(chat_id, user_id, text, sessions):
+    """ادامه جستجوی متنی"""
+    if user_id not in sessions:
+        return False
+    session = sessions[user_id]
+    step = session.get("step", "")
+
+    if text == BTN_BACK:
+        sessions.pop(user_id, None)
+        send_message(chat_id, "به منوی اصلی بازگشتید.", kb_main())
+        return True
+
+    if step != "tsearch_query":
+        return False
+
+    query = text.strip()
+    if len(query) < 2:
+        send_message(chat_id, "❌ حداقل ۲ کاراکتر وارد کنید:", kb_back())
+        return True
+
+    matches = find_similar_sub_specialties(query, max_results=5)
+
+    if not matches:
+        send_message(chat_id, TEXT_SEARCH_NO_RESULT.format(query=query), kb_main())
+        sessions.pop(user_id, None)
+        return True
+
+    # ذخیره برای مرحله بعد
+    session["data"]["_matches"] = matches
+    session["data"]["query"] = query
+
+    if len(matches) == 1:
+        # فقط یک نتیجه → مستقیم برو به مرحله بعد
+        cat, sub, dist = matches[0]
+        _apply_text_search_result(chat_id, user_id, cat, sub, sessions)
+        return True
+
+    # چند نتیجه → لیست نشون بده
+    session["step"] = "tsearch_pick"
+    send_message(
+        chat_id,
+        TEXT_SEARCH_MULTIPLE,
+        kb_text_search_results(matches)
+    )
+    return True
+
+
+def _apply_text_search_result(chat_id, user_id, cat, sub, sessions):
+    """اعمال نتیجه جستجوی متنی و رفتن به مرحله بعد"""
+    if user_id not in sessions:
+        return
+    session = sessions[user_id]
+    data = session["data"]
+
+    # اطلاعات پیدا شده رو ذخیره کن
+    data["category"] = cat
+    data["sub"] = sub
+
+    # پیام تأیید
+    send_message(
+        chat_id,
+        TEXT_SEARCH_FOUND.format(sub=sub, cat=cat),
+        kb_location()
+    )
+
+    # برو به مرحله محدوده
+    session["step"] = "req_area"
+    session["data"]["_from_text_search"] = True
+
+
+def handle_text_search_pick(chat_id, user_id, cat, sub, sessions):
+    """انتخاب از لیست نتایج جستجوی متنی"""
+    if user_id not in sessions:
+        return False
+    session = sessions[user_id]
+    if session.get("step") != "tsearch_pick":
+        return False
+
+    _apply_text_search_result(chat_id, user_id, cat, sub, sessions)
+    return True
+
+
+# ==================== ادامه جستجوی معمولی ====================
 def continue_search(chat_id, user_id, text, sessions, search_modes):
     if user_id not in sessions:
         return False
@@ -81,6 +176,10 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
     session = sessions[user_id]
     step = session["step"]
     data = session["data"]
+
+    # ===== اگه توی حالت جستجوی متنی هستیم، برو اونجا =====
+    if step == "tsearch_query":
+        return continue_text_search(chat_id, user_id, text, sessions)
 
     if text == BTN_BACK:
         if step == "req_area":
@@ -287,6 +386,7 @@ def continue_search(chat_id, user_id, text, sessions, search_modes):
     return False
 
 
+# ==================== لوکیشن ====================
 def handle_location(chat_id, user_id, location, sessions):
     if user_id not in sessions:
         return False
@@ -305,6 +405,7 @@ def handle_location(chat_id, user_id, location, sessions):
     return False
 
 
+# ==================== Fuzzy City ====================
 def handle_city_fuzzy_callback(chat_id, user_id, action, sessions):
     if user_id not in sessions:
         return False
@@ -345,6 +446,7 @@ def handle_city_multiple_callback(chat_id, user_id, choice, sessions):
     return True
 
 
+# ==================== تطبیق ====================
 def find_matching(category, sub, area, needs_onsite, priorities,
                   handover=None, cust_lat=None, cust_lng=None):
     all_match = []
@@ -387,7 +489,6 @@ def find_matching(category, sub, area, needs_onsite, priorities,
     else:
         result = all_match
 
-    # رتبه‌بندی با در نظر گرفتن امتیاز تخصص
     result.sort(key=lambda x: _rank_score(x, priorities, sub), reverse=True)
     return result[:3]
 
@@ -405,14 +506,6 @@ def _matches_times(e, handover):
 
 
 def _rank_score(e, priorities=None, specialty=None):
-    """
-    رتبه‌بندی بر اساس:
-    - امتیاز تخصص (اگه باشه) — وزن بالا
-    - امتیاز کلی
-    - اولویت‌های کاربر
-    - ویژه، حضوری
-    """
-    # امتیاز تخصص
     if specialty:
         spec_avg = get_spec_rating_for_search(e, specialty, fallback_to_overall=True)
     else:
@@ -477,7 +570,6 @@ def format_expert_line(e, idx, priorities, specialty=None):
     txt += "   📞 " + e["phone"] + "\n"
     txt += "   📍 " + e["area"] + "\n"
 
-    # امتیاز تخصص (اگه باشه) + امتیاز کلی
     if specialty:
         spec_avg = get_spec_rating_for_search(e, specialty, fallback_to_overall=False)
         spec_count = get_spec_reviews_count(e, specialty)
